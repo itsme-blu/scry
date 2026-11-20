@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Scry"><defs><linearGradient id="tile" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#202B48"/><stop offset="1" stop-color="#0E1427"/></linearGradient><linearGradient id="gem" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F2C57C"/><stop offset=".45" stop-color="#E8A33D"/><stop offset="1" stop-color="#3FD0B6"/></linearGradient></defs><rect x="1" y="1" width="62" height="62" rx="15" fill="url(#tile)" stroke="#2E3A5C" stroke-width="1.5"/>
+<path d="M32 10 L48 26 L32 54 L16 26 Z" fill="url(#gem)"/>
+<path d="M16 26 H48 M32 10 L26 26 L32 54 M32 10 L38 26 L32 54" fill="none" stroke="#0E1427" stroke-opacity=".28" stroke-width="1.1" stroke-linejoin="round"/>
+<path d="M32 10 L16 26 L26 26 Z" fill="#FFFFFF" fill-opacity=".3"/>
+<path d="M49 9 L50.2 12.8 L54 14 L50.2 15.2 L49 19 L47.8 15.2 L44 14 L47.8 12.8 Z" fill="#F2C57C"/>
+</svg>

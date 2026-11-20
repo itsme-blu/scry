@@ -1,0 +1,14 @@
+{
+  "name": "Scry",
+  "short_name": "Scry",
+  "description": "Find where your money went.",
+  "start_url": "./",
+  "scope": "./",
+  "id": "./",
+  "display": "standalone",
+  "background_color": "#0E1427",
+  "theme_color": "#0E1427",
+  "icons": [
+    { "src": "brand/scry-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

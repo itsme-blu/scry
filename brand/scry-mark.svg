@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Scry">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#202B48"/>
+      <stop offset="1" stop-color="#0E1427"/>
+    </linearGradient>
+    <linearGradient id="gem" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F2C57C"/>
+      <stop offset=".45" stop-color="#E8A33D"/>
+      <stop offset="1" stop-color="#3FD0B6"/>
+    </linearGradient>
+    <radialGradient id="glow" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#3FD0B6" stop-opacity=".55"/>
+      <stop offset="1" stop-color="#3FD0B6" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect x="1" y="1" width="62" height="62" rx="15" fill="url(#tile)" stroke="#2E3A5C" stroke-width="1.5"/>
+  <!-- the map: two faint grid lines -->
+  <path d="M10 49 H54 M32 44 V56" stroke="#2E3A5C" stroke-width="1.5" stroke-linecap="round"/>
+  <!-- found spot -->
+  <ellipse cx="32" cy="50" rx="11" ry="4" fill="url(#glow)"/>
+  <circle cx="32" cy="50" r="2" fill="#3FD0B6"/>
+  <!-- chain -->
+  <circle cx="32" cy="9.5" r="2.6" fill="none" stroke="#A7B0C6" stroke-width="1.6"/>
+  <path d="M32 12.2 V17" stroke="#A7B0C6" stroke-width="1.6" stroke-linecap="round"/>
+  <!-- scrying crystal -->
+  <path d="M32 17 L42 27 L32 44 L22 27 Z" fill="url(#gem)"/>
+  <path d="M22 27 H42 M32 17 L28 27 L32 44 M32 17 L36 27 L32 44" fill="none" stroke="#0E1427" stroke-opacity=".28" stroke-width="1" stroke-linejoin="round"/>
+  <path d="M32 17 L22 27 L28 27 Z" fill="#FFFFFF" fill-opacity=".28"/>
+</svg>
