@@ -95,7 +95,8 @@ const RULES = [
 
 // ---------- notification safety (mirrors looks_like_code / has_money_amount / money_redact in schema.sql) ----------
 // A pattern check reduces risk; it cannot promise every login-code message is caught.
-const CODE_WORDS = /otp|one[- ]?time|verif|authenticat|authori[sz]|passcode|pass code|password|\bpin\b|mpin|security code|log[- ]?in|sign[- ]?in|access code|confirmation code|activation|new device|do not share|don't share|never share|huwag (mo )?(ibigay|ibahagi|i-share)|wag (mo )?(ibigay|ibahagi)/i;
+// (No "authori…": MariBank ends every alert with "If unauthorized, please chat with us", Nov 21 2026.)
+const CODE_WORDS = /otp|one[- ]?time|verif|authenticat|passcode|pass code|password|\bpin\b|mpin|security code|log[- ]?in|sign[- ]?in|access code|confirmation code|activation|new device|do not share|don't share|never share|huwag (mo )?(ibigay|ibahagi|i-share)|wag (mo )?(ibigay|ibahagi)/i;
 function looksLikeCode(t) {
   t = String(t || '');
   return CODE_WORDS.test(t) || /code[^0-9]{0,25}[0-9]{4,8}(?![0-9])/i.test(t) || /(^|[^0-9])[0-9]{4,8}[^0-9]{0,25}(is your|as your)/i.test(t);
@@ -300,10 +301,13 @@ function parseNotif(item) {
   const outRe = /you(?:'ve| have)? sent|\bsent to\b|you paid|payment (?:to|of|for)|\bpaid\b|purchase|debited|withdr[ae]w|cash[- ]?out|transferred to|\bspent\b|charged|deducted|money out|card (?:payment|transaction)/i;
   let kind = null;
   if (/sent you|has sent you/i.test(text)) kind = 'income';
+  else if (/\btransfer of\b.{1,40}?\bto\b/i.test(text)) kind = 'expense';   // MariBank: "An InstaPay transfer of PHP 50.00 to GCash …"
+  else if (/\btransfer of\b.{1,40}?\bfrom\b/i.test(text)) kind = 'income';
   else if (outRe.test(text)) kind = 'expense';
   else if (inRe.test(text)) kind = 'income';
   const pq = text.match(/\b(?:from|to|at)\s+["“']([^"”']{1,40})["”']/);   // a quoted name: from "JUAN & CO"
-  const pm = pq || text.match(/\b(?:from|to|at)\s+([A-Z0-9][A-Za-z0-9&'.\- ]{1,40}?)(?=\s+(?:on|with|via|using|ref|reference|has|is|was|and|for)\b|\s*[.,!(•]|$)/);
+  // A full stop ends the name only at a sentence end, so initials like "B. H. R. AUSTRIA" stay whole.
+  const pm = pq || text.match(/\b(?:from|to|at)\s+([A-Z0-9][A-Za-z0-9&'.\- ]{1,40}?)(?=\s+(?:on|with|via|using|ref|reference|has|is|was|and|for)\b|\s*[,!(•]|\.(?:\s+[a-z]|\s*$)|$)/);
   const rm = text.match(/(?:ref(?:erence)?(?:\s*(?:no|number|#))?\.?|txn(?: id)?|transaction id)[:\s#]*([A-Z0-9-]{5,})/i);
   return { amount, currency, kind, party: pm ? pm[1].trim() : null, ref: rm ? rm[1] : null, ok: amount != null && kind != null };
 }
@@ -317,10 +321,35 @@ const inboxAccount = it => {
   const cur = parseNotif(it).currency;
   return mine.find(x => (x.currency || 'PHP') === cur) || mine[0];
 };
+// ----- transfers between Blu's own accounts -----
+// His names as banks print them live in his Scry login profile (user_metadata.own_names), never in this public code.
+const ownNames = () => String((S.user?.user_metadata?.own_names ?? S.settings.ownNames) || '')
+  .split(',').map(norm).filter(n => n.length >= 3);
+const isOwnParty = party => { const p = norm(party); return !!p && ownNames().some(n => p.includes(n)); };
+const BANK_WORDS = { gcash: /gcash/i, gotyme: /go-?\s?tyme/i, maribank: /mari\s?bank/i, wise: /\bwise\b/i };
+function accountNamedIn(text, currency, exceptId) {
+  const k = Object.keys(BANK_WORDS).find(b => BANK_WORDS[b].test(text || '')); if (!k) return null;
+  const mine = S.d.accounts.filter(x => x.bank === k && !x.archived && x.id !== exceptId);
+  return mine.find(x => (x.currency || 'PHP') === currency) || mine[0] || null;
+}
+const sameTransfer = (fromId, toId, amount, date) => S.d.transactions.find(t => t.kind === 'transfer'
+  && (!fromId || t.account_id === fromId) && (!toId || t.to_account_id === toId)
+  && Math.abs(num(t.amount) - amount) < 0.005 && Math.abs(daysBetween(t.date, date)) <= 2);
+
 function inboxCheck(it) {
   const p = parseNotif(it), a = inboxAccount(it), date = iso(new Date(it.received_at));
-  const dup = a && p.amount != null ? possibleDuplicate(a.id, p.amount, date) : null;
   const curMismatch = a && p.ok && p.currency !== (a.currency || 'PHP');
+  const own = p.ok && isOwnParty(p.party);
+  if (own && p.kind === 'expense') {                       // money leaving one of his accounts for another of his
+    const to = accountNamedIn(p.party, p.currency, a?.id);
+    const dup = a && to ? sameTransfer(a.id, to.id, p.amount, date) : null;
+    return { p, a, date, dup, curMismatch, xfer: { from: a, to }, ready: !!(a && to && !dup && !curMismatch) };
+  }
+  if (own && p.kind === 'income') {                        // the receiving side of his own transfer
+    const counted = a ? sameTransfer(null, a.id, p.amount, date) : null;
+    return { p, a, date, dup: counted, curMismatch, xfer: { from: null, to: a }, counted: !!counted, ready: false };
+  }
+  const dup = a && p.amount != null ? possibleDuplicate(a.id, p.amount, date) : null;
   return { p, a, date, dup, curMismatch, ready: p.ok && a && !dup && !curMismatch };
 }
 
@@ -495,14 +524,19 @@ function tray(limit) {
   const items = newInbox(); if (!items.length) return '';
   const ready = items.filter(it => inboxCheck(it).ready).length;
   const rows = items.slice(0, limit).map(it => {
-    const { p, a, dup, curMismatch, ready } = inboxCheck(it), bank = BANKS[bankOf(it)];
-    const what = p.ok ? `<span class="amt ${p.kind === 'income' ? 'pos' : ''}">${p.kind === 'income' ? '+' : '−'}${money(p.amount, p.currency)}</span>${p.party ? `<span class="muted">${p.kind === 'income' ? 'from' : 'to'}</span> ${esc(p.party)}` : ''}`
-      : `<span class="warn">Couldn't read this one</span>`;
-    const g = p.ok ? cat(guessCategory(p.party || it.title, p.kind)) : null;
+    const { p, a, dup, curMismatch, ready, xfer, counted } = inboxCheck(it), bank = BANKS[bankOf(it)];
+    const what = !p.ok ? `<span class="warn">Couldn't read this one</span>`
+      : xfer ? `<span class="amt muted">⇄ ${money(p.amount, p.currency)}</span> ${esc(xfer.from?.name || 'one of your accounts')} → ${esc(xfer.to?.name || 'one of your accounts')}`
+      : `<span class="amt ${p.kind === 'income' ? 'pos' : ''}">${p.kind === 'income' ? '+' : '−'}${money(p.amount, p.currency)}</span>${p.party ? `<span class="muted">${p.kind === 'income' ? 'from' : 'to'}</span> ${esc(p.party)}` : ''}`;
+    const g = p.ok && !xfer ? cat(guessCategory(p.party || it.title, p.kind)) : null;
     const meta = [
-      a ? `<span class="badge">→ ${esc(a.name)}</span>` : `<span class="badge risk">No ${esc(bank?.name || '')} account linked</span>`,
+      xfer ? '<span class="badge ai">Your own transfer</span>' : '',
+      xfer && counted ? '<span class="badge ok">Already counted: dismiss this one</span>' : '',
+      xfer && !counted && !xfer.from ? '<span class="badge db">Tap Review to pick where it came from</span>' : '',
+      xfer && xfer.from && !xfer.to ? '<span class="badge db">Tap Review to pick where it went</span>' : '',
+      !xfer ? (a ? `<span class="badge">→ ${esc(a.name)}</span>` : `<span class="badge risk">No ${esc(bank?.name || '')} account linked</span>`) : '',
       g ? `<span class="badge ai">${catIcon(g)} ${esc(g.name)}</span>` : '',
-      dup ? '<span class="badge db">Possible duplicate</span>' : '', curMismatch ? `<span class="badge db">${esc(p.currency)} ≠ ${esc(a.currency)}</span>` : '',
+      dup && !counted ? '<span class="badge db">Possible duplicate</span>' : '', curMismatch ? `<span class="badge db">${esc(p.currency)} ≠ ${esc(a.currency)}</span>` : '',
       `<span>${esc(bank?.name || it.app || '?')} · ${esc(timeOf(it.received_at))}</span>`,
     ].filter(Boolean).join('');
     return `<div class="rv"><div class="bankdot" aria-hidden="true">${BANK_LOGO[bankOf(it)] ? `<img class="logo" src="${BANK_LOGO[bankOf(it)]}" alt="" width="38" height="38">` : esc((bank?.name || it.app || '?')[0])}</div>
@@ -681,6 +715,9 @@ function vSettings() {
           <b>Limits:</b> 60 notifications an hour, 300 waiting. The same text from the same bank on the same day is saved once.<br><br>
           <b>Your choices (Nov 20):</b> sorting happens on the phone first · every item waits for your ✓, nothing is added automatically · Wise uses notifications plus a monthly CSV statement, not the Wise API.</div>
       </div>
+      <h3 style="margin:20px 0 6px">Your name on bank alerts</h3>
+      <p class="xs faint" style="margin:0 0 8px">When a transfer is to or from one of these names, Scry logs it as a transfer between your own accounts, not spending. Separate with commas.</p>
+      <input data-c="ownNames" style="width:100%" placeholder="e.g. Juan Dela Cruz, J. D. Cruz" value="${esc((S.user?.user_metadata?.own_names ?? S.settings.ownNames) || '')}" aria-label="Your names on bank alerts">
       <h3 style="margin:20px 0 8px">Test the filter and reader</h3>
       <p class="xs faint" style="margin:0 0 8px">Runs only in this browser. Shows whether a notification would be kept, what would be stored, and what the reader understands.</p>
       <div class="row"><select id="simApp" aria-label="Bank app">${Object.entries(BANKS).map(([k, v]) => `<option value="${k}">${v.name}</option>`).join('')}</select>
@@ -950,10 +987,12 @@ const A = {
   async acceptInbox(el) { await acceptOne(S.d.inbox.find(i => i.id === el.dataset.id)); render(); toast('Approved and added'); },
   async acceptAll() { let n = 0; for (const it of newInbox()) if (inboxCheck(it).ready) { await acceptOne(it); n++; } render(); toast(`Approved ${n}`); },
   editInbox(el) {
-    const it = S.d.inbox.find(i => i.id === el.dataset.id), { p, a } = inboxCheck(it);
+    const it = S.d.inbox.find(i => i.id === el.dataset.id), { p, a, xfer } = inboxCheck(it);
+    const raw = [it.title, it.body].filter(Boolean).join(' · '), date = iso(new Date(it.received_at));
+    if (xfer) return txForm({ kind: 'transfer', amount: p.amount, account_id: xfer.from?.id, to_account_id: xfer.to?.id, date, note: 'Transfer', tag: 'personal' }, { inboxId: it.id, raw });
     const kind = p.kind || 'expense', note = p.party || (it.title || '').slice(0, 60);
-    txForm({ kind, amount: p.amount, account_id: a?.id, date: iso(new Date(it.received_at)), note, category_id: guessCategory(note, kind), tag: 'personal' },
-      { inboxId: it.id, raw: [it.title, it.body].filter(Boolean).join(' · ') });
+    txForm({ kind, amount: p.amount, account_id: a?.id, date, note, category_id: guessCategory(note, kind), tag: 'personal' },
+      { inboxId: it.id, raw });
   },
   async ignoreInbox(el) { await safe(() => DB.update('inbox', el.dataset.id, { status: 'ignored' })); render(); toast('Dismissed. Its text is cleared.'); },
   simulate() {
@@ -1016,10 +1055,13 @@ const A = {
   },
 };
 async function acceptOne(it) {
-  const { p, a, date } = inboxCheck(it); if (!p.ok || !a) return;
+  const { p, a, date, xfer, ready } = inboxCheck(it); if (!p.ok || !a || !ready) return;
   const note = p.party || it.title || BANKS[bankOf(it)]?.name;
   await safe(async () => {
-    const [t] = await DB.insert('transactions', { kind: p.kind, amount: p.amount, date, account_id: a.id, note, category_id: guessCategory(note, p.kind), tag: 'personal', inbox_id: it.id });
+    const row = xfer
+      ? { kind: 'transfer', amount: p.amount, date, account_id: xfer.from.id, to_account_id: xfer.to.id, note: `Transfer to ${xfer.to.name}`, tag: 'personal', inbox_id: it.id }
+      : { kind: p.kind, amount: p.amount, date, account_id: a.id, note, category_id: guessCategory(note, p.kind), tag: 'personal', inbox_id: it.id };
+    const [t] = await DB.insert('transactions', row);
     await DB.update('inbox', it.id, { status: 'done', transaction_id: t.id });
   });
 }
@@ -1075,6 +1117,13 @@ document.addEventListener('change', async ev => {
   if (c === 'faccount') { S.f.account = el.value; render(); }
   else if (c === 'fcategory') { S.f.category = el.value; render(); }
   else if (c === 'budget') { await safe(() => setBudget(el.dataset.id, amt(el.value))); render(); }
+  else if (c === 'ownNames') {
+    const v = el.value.trim();
+    if (isDemo()) { S.settings.ownNames = v; saveSettings(); return toast('Saved'); }
+    const { data, error } = await S.sb.auth.updateUser({ data: { own_names: v } });
+    if (error) return toast('Could not save: ' + error.message);
+    S.user = data.user; render(); toast('Saved to your Scry profile');
+  }
   else if (c === 'rate') { const v = num(el.value); if (v > 0) S.settings.rates[el.dataset.cur] = v; else delete S.settings.rates[el.dataset.cur]; saveSettings(); }
   else if ($('#txf') && (el.name === 'account_id' || el.name === 'to_account_id' || el.name === 'category_id')) syncTxForm();
   else if (el.id === 'impFile' && el.files[0]) { const text = await el.files[0].text(); imp.rows = parseCSV(text.replace(/^﻿/, '')); imp.map = null; imp.file = el.files[0].name; if (imp.rows.length < 2) { imp.rows = null; return toast('That file looks empty'); } renderImport(); }
