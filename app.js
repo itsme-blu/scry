@@ -1180,4 +1180,19 @@ async function boot() {
     try { const before = newInbox().length; S.d.inbox = await fetchAll('inbox'); if (newInbox().length !== before) render(); } catch { /* offline */ }
   }, 60000);
 }
+// Auto-update: phones keep an old copy of the page for a while. On open (and when the app comes back
+// to the foreground) fetch index.html fresh; if it names a newer app.js version, reload once.
+async function checkForUpdate() {
+  try {
+    const mine = (document.querySelector('script[src^="app.js"]')?.getAttribute('src') || '').split('v=')[1];
+    const html = await fetch('index.html?check=' + Date.now(), { cache: 'no-store' }).then(r => r.text());
+    const latest = (html.match(/app\.js\?v=(\d+)/) || [])[1];
+    if (mine && latest && latest !== mine && !sessionStorage.getItem('scry-updated-to-' + latest)) {
+      sessionStorage.setItem('scry-updated-to-' + latest, '1');
+      location.replace(location.pathname + '?v=' + latest + location.hash);
+    }
+  } catch { /* offline or blocked: keep running the current version */ }
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkForUpdate(); });
+checkForUpdate();
 boot();
