@@ -302,7 +302,8 @@ function parseNotif(item) {
   if (/sent you|has sent you/i.test(text)) kind = 'income';
   else if (outRe.test(text)) kind = 'expense';
   else if (inRe.test(text)) kind = 'income';
-  const pm = text.match(/\b(?:from|to|at)\s+([A-Z0-9][A-Za-z0-9&'.\- ]{1,40}?)(?=\s+(?:on|with|via|using|ref|reference|has|is|was|and|for)\b|\s*[.,!(•]|$)/);
+  const pq = text.match(/\b(?:from|to|at)\s+["“']([^"”']{1,40})["”']/);   // a quoted name: from "JUAN & CO"
+  const pm = pq || text.match(/\b(?:from|to|at)\s+([A-Z0-9][A-Za-z0-9&'.\- ]{1,40}?)(?=\s+(?:on|with|via|using|ref|reference|has|is|was|and|for)\b|\s*[.,!(•]|$)/);
   const rm = text.match(/(?:ref(?:erence)?(?:\s*(?:no|number|#))?\.?|txn(?: id)?|transaction id)[:\s#]*([A-Z0-9-]{5,})/i);
   return { amount, currency, kind, party: pm ? pm[1].trim() : null, ref: rm ? rm[1] : null, ok: amount != null && kind != null };
 }
@@ -310,7 +311,12 @@ function possibleDuplicate(accountId, amount, date) {
   return S.d.transactions.find(t => t.account_id === accountId && Math.abs(num(t.amount) - amount) < 0.005 && Math.abs(daysBetween(t.date, date)) <= 2);
 }
 const newInbox = () => S.d.inbox.filter(i => i.status === 'new').sort((a, b) => b.received_at.localeCompare(a.received_at));
-const inboxAccount = it => S.d.accounts.find(x => x.bank === bankOf(it) && !x.archived);
+// Same bank AND same currency first (Wise has PHP/USD/CAD accounts), then any account of that bank.
+const inboxAccount = it => {
+  const mine = S.d.accounts.filter(x => x.bank === bankOf(it) && !x.archived);
+  const cur = parseNotif(it).currency;
+  return mine.find(x => (x.currency || 'PHP') === cur) || mine[0];
+};
 function inboxCheck(it) {
   const p = parseNotif(it), a = inboxAccount(it), date = iso(new Date(it.received_at));
   const dup = a && p.amount != null ? possibleDuplicate(a.id, p.amount, date) : null;
@@ -658,14 +664,15 @@ function vSettings() {
         <div class="stack">
           <div class="row">${keyLine}</div>
           ${supa ? `<div class="row"><button class="btn pri" data-a="makeKey">${ks && !ks.revoked_at ? 'Replace phone key' : 'Create phone key'}</button>${ks && !ks.revoked_at ? '<button class="btn danger" data-a="revokeKey">Revoke key</button>' : ''}</div><div id="keybox"></div>` : '<div class="callout">Setting up the phone link needs your own Supabase project. Nothing is set up yet, and nothing will be until you decide.</div>'}
-          <details><summary>MacroDroid setup (later, once you decide)</summary>
+          <details><summary>MacroDroid setup (on your phone)</summary>
           <ol class="small muted" style="line-height:1.75;padding-left:18px">
-            <li>Install MacroDroid from the Play Store.</li>
-            <li>Trigger: Notification Received → only the apps GCash, MariBank, GoTyme, Wise. Android asks you to allow notification access for MacroDroid.</li>
-            <li><b>Required:</b> add a constraint so only notifications whose text contains PHP, ₱, USD or a money amount are sent. Login codes then never leave your phone. Check what MacroDroid's text-matching options are called on your version. Don't skip this step.</li>
-            <li>Action: HTTP Request, POST to <code>${esc(url)}/rest/v1/rpc/ingest_notification</code>, headers <code>apikey: (anon key)</code> and <code>Content-Type: application/json</code>.</li>
-            <li>Body: <code>{"p_key":"…","p_app":"‹app name›","p_package":"‹package›","p_title":"‹title›","p_body":"‹text›"}</code>, filled with MacroDroid's notification magic text.</li>
-            <li>The reply is one word: ok, duplicate, denied, or skipped:code / skipped:no-amount / skipped:app / skipped:rate / skipped:full.</li>
+            <li>Install <b>MacroDroid</b> from the Play Store, open it, tap <b>Add Macro</b>, name it <b>Scry</b>.</li>
+            <li><b>Trigger</b> → Device Events → <b>Notification</b> → <b>Notification Received</b> → <b>Select application(s)</b>: GCash, MariBank, GoTyme, Wise. Allow notification access when Android asks.</li>
+            <li><b>Required filter</b>, same screen: text content → <b>Matches</b>, tick <b>Regex</b>, paste:<br><code>(?is)^(?!.*(otp|one.?time|verif|passcode|password|\bpin\b|mpin|do not share)).*(PHP|₱|USD|CAD|SGD|\bP ?[0-9]).*$</code><br>Only money notifications without login words ever leave your phone.</li>
+            <li><b>Action</b> → Web Interactions → <b>HTTP Request</b>. Method <b>POST</b>. URL: <code>${esc(url)}/functions/v1/ingest</code></li>
+            <li><b>Query Params</b> tab, add five: <code>key</code> = your phone key · <code>app</code> = {not_app_name} · <code>pkg</code> = {not_app_package} · <code>title</code> = {not_title} · <code>text</code> = {notification}. Use the magic-text button to insert the {…} items.</li>
+            <li>Save. Pay ₱1 with GCash: it should show in <b>To review</b> within a minute.</li>
+            <li>Optional check: in the action, <b>Save HTTP return code</b> to a variable. 200 = received, 401 = wrong key.</li>
           </ol></details>
         </div>
         <div class="callout"><b>What leaves your phone:</b> the app name, the notification's title and text, and the phone key, over HTTPS to your Supabase project. Nothing else.<br><br>
