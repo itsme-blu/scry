@@ -335,7 +335,7 @@ const incCur = i => i.pay_cur || curOf(i.account_id);
 const incAmt = i => num(i.hourly) && num(i.hours) ? num(i.hourly) * num(i.hours) : num(i.amount);
 // Pay whose hours change (GOOD Hoops): estimate from the last 3 paydays he logged, in the account's currency.
 function incAvg(i) {
-  const n = norm(i.name), past = S.d.transactions.filter(t => t.kind === 'income' && t.account_id === i.account_id && norm(t.note) === n).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 3);
+  const n = norm(i.name), past = S.d.transactions.filter(t => t.kind === 'income' && t.account_id === i.account_id && (norm(t.note) === n || payerName(t.note) === i.name)).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 3);
   return past.length ? { v: past.reduce((s, t) => s + num(t.amount), 0) / past.length, n: past.length } : null;
 }
 const incInAcc = i => { const v = incAmt(i), pc = incCur(i), ac = curOf(i.account_id); if (pc === ac) return v; const r1 = rate(pc), r2 = rate(ac); return r1 && r2 ? Math.round(v * r1 / r2 * 100) / 100 : null; };
@@ -413,6 +413,9 @@ function billDueOf(item) {                      // a due date written in the mes
   const d = new Date(/\d{4}/.test(m[1]) || /\//.test(m[1]) ? m[1] : `${m[1]} ${new Date().getFullYear()}`);
   return isNaN(d) ? null : iso(d);
 }
+// Employers as their payroll names appear in Wise → the income source they belong to.
+const PAYERS = [[/western canada preparatory/i, 'GOOD Hoops'], [/summit stride/i, 'Intelocate']];
+const payerName = s => (PAYERS.find(([re]) => re.test(s || '')) || [])[1] || null;
 function parseNotif(item) {
   const text = `${item.title || ''}. ${item.body || ''}`.replace(/\s+/g, ' ');
   let amount = null, currency = 'PHP', m;
@@ -451,7 +454,8 @@ function parseNotif(item) {
   // A fee written in the message: "fee of PHP 15.00", "convenience fee: P10"
   const fm = text.match(/(?:transaction|service|convenience|processing|transfer)?\s*(?:fee|charge)s?\b[^0-9]{0,25}?(?:PHP|₱|\bP)?\s?([0-9]+(?:\.[0-9]{1,2})?)/i);
   const fee = fm && !cashback ? Number(fm[1]) : 0;
-  return { amount, currency, kind, party: cashback ? 'Cashback' : (pm ? pm[1].trim() : null), cashback, fee: fee > 0 && amount && fee < amount ? fee : 0, ref: rm ? rm[1] : null, ok: amount != null && kind != null };
+  const payer = kind === 'income' ? payerName(text) : null;
+  return { amount, currency, kind, party: cashback ? 'Cashback' : payer ? payer : (pm ? pm[1].trim() : null), payer, cashback, fee: fee > 0 && amount && fee < amount ? fee : 0, ref: rm ? rm[1] : null, ok: amount != null && kind != null };
 }
 function possibleDuplicate(accountId, amount, date) {
   const near = S.d.transactions.filter(t => t.account_id === accountId && Math.abs(daysBetween(t.date, date)) <= 2);
@@ -1233,8 +1237,8 @@ function vBills() {
     ${srcs.length ? `<div class="list">${inc.slice(0, 6).map(o => incomeRow(o, o.first)).join('') || '<div class="empty1">No paydays in the next 45 days.</div>'}</div>
       <div class="xs faint" style="margin-top:8px">About ${money(incomePerMonth())} a month from ${srcs.length} source${srcs.length === 1 ? '' : 's'}${srcs.some(x => !num(x.amount) && !incAvg(x)) ? ' (pay that varies counts once you have logged a payday)' : ''}</div>`
       : '<div class="empty1">Add GOOD Hoops, Intelocate and any other pay so Scry knows when money is coming in.</div>'}
-    ${srcs.some(x => /good ?hoops/i.test(x.name)) ? '' : `<button class="inc-suggest" data-a="suggestGoodHoops">${IC('sparkles', 'sm')}<span><b>Add your GOOD Hoops pay</b><small>US$8/hr · hours vary · every 2 weeks · into Wise</small></span>${IC('chevron-right', 'sm')}</button>`}
-    ${srcs.some(x => /intelocate|summit/i.test(x.name)) ? '' : `<button class="inc-suggest" data-a="suggestIntelocate">${IC('sparkles', 'sm')}<span><b>Add your Intelocate pay</b><small>US$6/hr · 80 hrs every 2 weeks · into Wise · next Dec 5</small></span>${IC('chevron-right', 'sm')}</button>`}</section>`;
+    ${srcs.some(x => /good ?hoops/i.test(x.name)) ? '' : `<button class="inc-suggest" data-a="suggestGoodHoops">${IC('sparkles', 'sm')}<span><b>Add your GOOD Hoops pay</b><small>US$8/hr · hours vary · every 2 weeks · into Wise USD · next Dec 5</small></span>${IC('chevron-right', 'sm')}</button>`}
+    ${srcs.some(x => /intelocate|summit/i.test(x.name)) ? '' : `<button class="inc-suggest" data-a="suggestIntelocate">${IC('sparkles', 'sm')}<span><b>Add your Intelocate pay</b><small>US$6/hr · 80 hrs every 2 weeks · into Wise USD · next Dec 5</small></span>${IC('chevron-right', 'sm')}</button>`}</section>`;
   const ub = unpaidBills(balances());
   return head + (ub.count ? `<div class="mb">${ub.card}</div>` : '') + incCard + `<section class="card">${group('Overdue', late)}${group('Next 7 days', soon)}${group('Later', later)}${all.length ? '' : '<div class="empty">No bills yet. Add rent, Meralco, internet, subscriptions…</div>'}</section>
     ${paused.length ? `<section class="card" style="margin-top:var(--gap)"><h2>Paid one-offs & paused</h2><div class="list">${paused.map(b => billRow({ bill: b, date: b.due_date }, false)).join('')}</div></section>` : ''}`;
@@ -1756,12 +1760,11 @@ const A = {
   addBill: () => billForm(),
   addIncome: () => activeAccounts().length ? incomeForm() : (toast('Add an account first'), accountForm()),
   suggestGoodHoops: () => {
-    const wise = activeAccounts().find(a => a.bank === 'wise' && a.currency === 'PHP') || activeAccounts().find(a => a.bank === 'wise');
-    incomeForm({ name: 'GOOD Hoops', pay_cur: 'USD', hourly: 8, account_id: wise?.id, every: 'biweekly', tag: 'personal' });
-    toast('Set the next payday, then Save');
+    const wise = activeAccounts().find(a => a.bank === 'wise' && a.currency === 'USD') || activeAccounts().find(a => a.bank === 'wise');
+    incomeForm({ name: 'GOOD Hoops', pay_cur: 'USD', hourly: 8, account_id: wise?.id, every: 'biweekly', next: '2026-12-05', tag: 'personal' });
   },
   suggestIntelocate: () => {
-    const wise = activeAccounts().find(a => a.bank === 'wise' && a.currency === 'PHP') || activeAccounts().find(a => a.bank === 'wise');
+    const wise = activeAccounts().find(a => a.bank === 'wise' && a.currency === 'USD') || activeAccounts().find(a => a.bank === 'wise');
     incomeForm({ name: 'Intelocate (Summit Stride)', pay_cur: 'USD', hourly: 6, hours: 80, account_id: wise?.id, every: 'biweekly', next: '2026-12-05', tag: 'personal' });
   },
   editIncome: el => incomeForm(incomes().find(x => x.id === el.dataset.id)),
@@ -1944,8 +1947,14 @@ async function acceptOne(it) {
     const row = xfer
       ? { kind: 'transfer', amount: p.amount, date, account_id: xfer.from.id, to_account_id: xfer.to.id, note: `Transfer to ${xfer.to.name}`, tag: 'personal', inbox_id: it.id }
       : { kind: p.kind, amount: p.amount, date, account_id: a.id, note, category_id: guessCategory(note, p.kind), tag: 'personal', inbox_id: it.id };
+    const src = !xfer && p.payer ? incomes().find(x => norm(x.name).includes(norm(p.payer))) : null;
+    if (src) { row.note = src.name; row.category_id = row.category_id || (catsOf('income').find(c => /salary|pay|wage|freelance|work/i.test(c.name)) || {}).id || null; row.tag = src.tag || 'personal'; }
     const [t] = await DB.insert('transactions', row);
     await DB.update('inbox', it.id, { status: 'done', transaction_id: t.id });
+    if (src && src.next <= addDays(date, 3)) {
+      let d = src.next; do { d = nextPayday(d, src.every); } while (d && d <= date);
+      await saveIncomes(incomes().map(x => x.id === src.id ? { ...x, next: d || x.next } : x));
+    }
   });
 }
 async function setBudget(cid, amount) {
