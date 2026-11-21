@@ -440,7 +440,8 @@ function renderNav() {
   const link = ([k, l, i]) => `<a href="#${k}" class="${S.view === k ? 'on' : ''}" ${S.view === k ? 'aria-current="page"' : ''} aria-label="${l}"><span class="ni">${IC(i)}</span>${l}${cnt(k)}</a>`;
   $('#railnav').innerHTML = NAV.map(link).join('') + `<a href="#penny" class="penny-link ${S.view === 'penny' ? 'on' : ''}"><span class="ni">${IC('sparkles')}</span>Ask Penny</a>`
     + '<div class="sep"></div>' + link(['settings', 'Settings', 'settings']);
-  $('#tabnav').innerHTML = NAV.map(link).join('');
+  const tab = k => link(NAV.find(n => n[0] === k));
+  $('#tabnav').innerHTML = tab('home') + tab('tx') + `<button class="tab-add" data-a="addSheet" aria-label="Add">${IC('plus', 'lg')}</button>` + tab('bills') + tab('budget');
 }
 function mhead() {
   const hr = new Date().getHours(), hi = hr < 12 ? 'Good morning' : hr < 18 ? 'Good afternoon' : 'Good evening';
@@ -621,8 +622,8 @@ function vHome() {
   const recentBody = recent.length ? `<div class="list">${recent.map(txRow).join('')}</div>` : '<div class="empty1">Nothing logged yet this month.</div>';
   const pairBR = !up.length && !recent.length
     ? `<div class="card c12 slim" style="--o:6">${IC('circle-check', 'sm')} Nothing due soon · nothing logged yet</div>`
-    : !up.length || !recent.length ? `<div class="c12" style="--o:5">${up.length ? cardList('Coming up', '<a href="#bills">All bills</a>', billsBody) : cardList('Recent activity', '<a href="#tx">See all</a>', recentBody)}</div>`
-    : `<div class="c6" style="--o:5">${cardList('Coming up', '<a href="#bills">All bills</a>', billsBody)}</div><div class="c6" style="--o:7">${cardList('Recent activity', '<a href="#tx">See all</a>', recentBody)}</div>`;
+    : !up.length || !recent.length ? `<div class="c12" style="--o:${up.length ? 5 : 4}">${up.length ? cardList('Coming up', '<a href="#bills">All bills</a>', billsBody) : cardList('Recent activity', '<a href="#tx">See all</a>', recentBody)}</div>`
+    : `<div class="c6" style="--o:5">${cardList('Coming up', '<a href="#bills">All bills</a>', billsBody)}</div><div class="c6" style="--o:4">${cardList('Recent activity', '<a href="#tx">See all</a>', recentBody)}</div>`;
   const budCard = budRows.length ? cardList('Budgets', '<a href="#budget">See all</a>', budRows.map(r => { const p = r.sp / r.bud; return `<div class="meter"><div class="row"><span>${catIcon(r.c)} ${esc(r.c.name)}</span><span class="grow"></span><span class="mono xs ${p > 1 ? 'neg' : 'muted'}">${money(r.sp)} / ${money(r.bud)}</span></div><div class="bar"><i class="${p > 1 ? 'over' : p > .8 ? 'warn' : ''}" style="width:${Math.min(100, p * 100)}%"></i></div></div>`; }).join('')) : '';
   const whereCard = byCat.length ? cardList('Where the money went', monthName(thisMonth()), byCat.map(([cid, v]) => { const c = cat(cid); return `<div class="meter"><div class="row"><span>${catIcon(c)} ${esc(c?.name || 'Uncategorised')}</span><span class="grow"></span><span class="mono xs muted">${money(v)}</span></div><div class="bar"><i class="blue" style="width:${(v / maxCat) * 100}%"></i></div></div>`; }).join('')) : '';
   const pairBW = budCard && whereCard ? `<div class="c6" style="--o:8">${budCard}</div><div class="c6" style="--o:9">${whereCard}</div>` : (budCard || whereCard) ? `<div class="c12" style="--o:8">${budCard || whereCard}</div>` : '';
@@ -647,8 +648,11 @@ function vHome() {
       <button data-a="addTransfer"><span class="b">${IC('arrow-left-right')}</span>Transfer</button>
       <a href="#bills"><span class="b">${IC('receipt')}</span>Pay bill</a>
     </div>
-    ${newInbox().length ? `<div class="only-phone c12" style="--o:3">${reviewStrip()}</div><div class="only-desk c12">${tray(4)}</div>` : ''}
-    <div class="c12" style="--o:4"><div class="sechead"><b>Accounts</b><a href="#accounts">See all</a></div>
+    ${newInbox().length ? `<div class="only-phone c12" style="--o:2">${reviewStrip()}</div><div class="only-desk c12">${tray(4)}</div>` : ''}
+    <section class="card acc-list only-phone c12" style="--o:3"><h2>Accounts <small><a href="#accounts">See all</a></small></h2>
+      ${accs.map(a => `<div class="arow" data-a="openAccount" data-id="${a.id}" role="button" tabindex="0"><div class="lg">${accIcon(a, 40)}</div><div class="main"><div class="t">${esc(a.name)}</div><div class="s">${ACCOUNT_TYPES[a.type]?.[0] || ''}</div></div><div class="amt ${b[a.id] < 0 ? 'neg' : ''}">${money(b[a.id], a.currency)}</div></div>`).join('') || '<div class="empty1">No accounts yet. <a href="#" data-a="addAccount">Add your first</a></div>'}
+      ${accAll.length > accs.length ? `<a class="more" href="#accounts">${accAll.length - accs.length} more with nothing in them</a>` : ''}</section>
+    <div class="c12 only-desk"><div class="sechead"><b>Accounts</b><a href="#accounts">See all</a></div>
     <div class="acc-strip">${accs.map(a => `<div class="acc-tile" data-a="openAccount" data-id="${a.id}" role="button" tabindex="0"><div class="lg">${accIcon(a, 36)}</div><div class="t">${esc(a.name)}</div><div class="m ${b[a.id] < 0 ? 'neg' : ''}">${money(b[a.id], a.currency).replace(/\.00$/, '')}</div></div>`).join('') || '<div class="empty">No accounts yet. <a href="#" data-a="addAccount">Add your first</a></div>'}</div></div>
     ${pairBR}
     ${pairBW}
@@ -1151,7 +1155,16 @@ const A = {
   close: closeModal,
   closeScrim: (el, ev) => { if (ev.target === el) closeModal(); },
   addTx: () => activeAccounts().length ? txForm() : (toast('Add an account first'), accountForm()),
-  addTransfer: () => activeAccounts().length > 1 ? txForm({ kind: 'transfer' }) : toast('Add two accounts first'),
+  addSheet: () => modal('Add', `<div class="addgrid">
+      <button data-a="addKind" data-v="expense"><span class="b out">${IC('arrow-up-right')}</span><b>Expense</b><small>Money you spent</small></button>
+      <button data-a="addKind" data-v="income"><span class="b in">${IC('arrow-down-left')}</span><b>Income</b><small>Money you got</small></button>
+      <button data-a="addTransfer"><span class="b">${IC('arrow-left-right')}</span><b>Transfer</b><small>Between your accounts</small></button>
+      <button data-a="scanFromSheet"><span class="b gold">${IC('scan-line')}</span><b>Scan</b><small>Receipt, bill or statement</small></button>
+      <a href="#bills" data-a="close" class="wide"><span class="b">${IC('receipt')}</span><b>Pay a bill</b><small>Log a bill payment</small></a>
+    </div>`),
+  addKind: el => { closeModal(); if (!activeAccounts().length) return (toast('Add an account first'), accountForm()); txForm({ kind: el.dataset.v }); },
+  scanFromSheet: () => { closeModal(); scanPick(); },
+  addTransfer: () => { closeModal(); activeAccounts().length > 1 ? txForm({ kind: 'transfer' }) : toast('Add two accounts first'); },
   editTx: el => txForm(S.d.transactions.find(t => t.id === el.dataset.id)),
   pickCat: el => { $('#txf').category_id.value = el.dataset.id; $('#guessHint').textContent = ''; syncTxForm(); },
   setDate: el => { $('#txf').date.value = addDays(today(), Number(el.dataset.v)); },

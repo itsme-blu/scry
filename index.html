@@ -536,6 +536,34 @@ details.orig div{margin-top:8px;padding:10px 12px;border-radius:14px;background:
   .acc-sum .card .lbl{margin:0}
   .acc-sum .card .xs{width:100%}
 }
+/* ===== v13: phone Home like the best finance apps: + in the tab bar, accounts as a list ===== */
+.tab-add{display:none}
+.addgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.addgrid button,.addgrid a{all:unset;cursor:pointer;display:flex;flex-direction:column;gap:2px;padding:16px;border-radius:20px;background:rgba(255,255,255,.05);border:1px solid var(--line);color:var(--ink)}
+.addgrid button:hover,.addgrid a:hover{background:rgba(255,255,255,.09)}
+.addgrid .wide{grid-column:1/-1;flex-direction:row;align-items:center;gap:12px}
+.addgrid .wide .b{margin:0}
+.addgrid .b{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;background:rgba(255,255,255,.08);margin-bottom:10px}
+.addgrid .b.out{color:var(--risk);background:var(--risk-bg)} .addgrid .b.in{color:var(--ok);background:var(--ok-bg)}
+.addgrid .b.gold{background:linear-gradient(135deg,var(--gold-1),var(--gold-2));color:var(--on-gold)}
+.addgrid b{font:700 15px var(--display)} .addgrid small{font-size:12px;color:var(--faint)}
+.acc-list{padding-bottom:8px}
+.arow{display:grid;grid-template-columns:40px minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--line-soft);cursor:pointer}
+.acc-list h2+.arow{border-top:0}
+.arow .lg{width:40px;height:40px;border-radius:14px;overflow:hidden;display:grid;place-items:center;background:#fff}
+.arow .lg img{width:100%;height:100%;object-fit:contain}
+.arow .lg img[src$="cash.svg"]{background:#123}
+.arow .t{font-weight:600;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.arow .s{font-size:12px;color:var(--faint)}
+.arow .amt{font:700 16px var(--display);font-variant-numeric:tabular-nums}
+.acc-list .more{display:block;text-align:center;padding:12px 0 6px;font-size:13px;color:var(--faint);border-top:1px solid var(--line-soft);text-decoration:none}
+@media (max-width:1000px){ .quick.only-phone{display:none} }
+@media (max-width:760px){
+  .tabbar{grid-template-columns:1fr 1fr 76px 1fr 1fr}
+  .tab-add{display:grid;place-items:center;width:58px;height:58px;margin:0 auto;border-radius:20px;border:0;cursor:pointer;background:linear-gradient(135deg,var(--gold-1),var(--gold-2));color:var(--on-gold);box-shadow:0 10px 26px rgba(232,163,61,.45);transform:translateY(-14px)}
+  .fab{display:none!important}
+  .modal .addgrid{margin-bottom:4px}
+}
 </style>
 </head>
 <body>
@@ -544,6 +572,6 @@ details.orig div{margin-top:8px;padding:10px 12px;border-radius:14px;background:
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
 <script src="config.js?v=3" onerror="void 0"></script>
-<script src="app.js?v=12"></script>
+<script src="app.js?v=13"></script>
 </body>
 </html>
