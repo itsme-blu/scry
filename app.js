@@ -115,7 +115,7 @@ function screenNotification(item) {
   const raw = `${item.title || ''} ${item.body || ''}`;
   if (!/(gcash|wise|transferwise|mari ?bank|maribank|gotyme|go ?tyme|messag|\bmms\b|gmail|android\.gm\b)/i.test(`${item.app || ''} ${item.package || ''}`)) return { keep: false, why: 'not one of your bank apps, Messages or Gmail' };
   if (looksLikeCode(raw)) return { keep: false, why: 'looks like a login or verification code' };
-  if (!hasMoney(raw)) return { keep: false, why: 'no money amount in it' };
+  if (!hasMoney(raw) && !(/messag|\bmms\b|gmail|android\.gm\b/i.test(`${item.app || ''} ${item.package || ''}`) && /bill|due|payment|statement|soa|billing|amount/i.test(raw))) return { keep: false, why: 'no money amount in it' };
   return { keep: true, title: redact(String(item.title || '').slice(0, 300)), body: redact(String(item.body || '').slice(0, 1000)) };
 }
 
@@ -219,6 +219,9 @@ function balances() {
   return b;
 }
 // IOUs: debts and money people owe him are 'loan' accounts. They are not wallets.
+// A debt to a biller (Meralco arrears…) is an unpaid bill, shown apart from IOUs with people.
+const BILLER_RE = /meralco|pldt|globe|smart|converge|maynilad|manila water|sky ?(cable|fiber)?|dito|electric|water|internet|rent|insurance/i;
+const isBillDebt = a => a?.type === 'loan' && (BILLER_RE.test(a.name) || S.d.bills.some(b => b.active && norm(b.name) === norm(a.name)));
 const isIOU = a => a?.type === 'loan';
 function worth() {
   const b = balances(); let own = 0, owe = 0, owed = 0; const missing = new Set();
@@ -238,11 +241,17 @@ function cardCols(n) {
   return best;
 }
 function iouList(b) {
-  const ious = activeAccounts().filter(a => isIOU(a) && Math.abs(b[a.id]) > 0.004);
+  const ious = activeAccounts().filter(a => isIOU(a) && !isBillDebt(a) && Math.abs(b[a.id]) > 0.004);
   const row = a => { const v = b[a.id], nm = a.name.replace(/\s*\((?:i owe|owes me|owe[sd]? me|i owe him|i owe her)\)\s*$/i, '');
     return `<button class="iou" data-a="cardMenu" data-id="${a.id}"><span class="av ${v < 0 ? 'out' : 'in'}">${esc((nm[0] || '?').toUpperCase())}</span><span class="main"><b>${esc(nm)}</b><small>${v < 0 ? 'You owe' : 'Owes you'}</small></span><span class="amt ${v < 0 ? 'neg' : 'pos'}">${money(Math.abs(v), a.currency)}</span>${IC('chevron-right', 'sm')}</button>`; };
   const them = ious.filter(a => b[a.id] > 0), me = ious.filter(a => b[a.id] < 0);
   return { count: ious.length, html: `${them.length ? `<div class="iou-h">Owed to you</div>${them.map(row).join('')}` : ''}${me.length ? `<div class="iou-h">You owe</div>${me.map(row).join('')}` : ''}` };
+}
+function unpaidBills(b) {
+  const list = activeAccounts().filter(a => isBillDebt(a) && Math.abs(b[a.id]) > 0.004);
+  const total = list.reduce((t, a) => t + Math.max(0, -b[a.id]) * (rate(a.currency) ?? 0), 0);
+  const html = list.map(a => `<button class="iou" data-a="cardMenu" data-id="${a.id}"><span class="av out">${IC('receipt', 'sm')}</span><span class="main"><b>${esc(a.name)}</b><small>Unpaid balance</small></span><span class="amt neg">${money(Math.abs(b[a.id]), a.currency)}</span>${IC('chevron-right', 'sm')}</button>`).join('');
+  return { count: list.length, total, card: list.length ? `<section class="card iou-card"><div class="sh"><b class="cap">Unpaid bills</b><span class="grow"></span><span class="xs faint">${money(total)} to clear</span></div>${html}</section>` : '' };
 }
 const ADJ = 'Balance adjustment';
 const isAdj = t => t.note === ADJ && !t.category_id;
@@ -407,9 +416,9 @@ function parseNotif(item) {
   const rm = text.match(/(?:ref(?:erence)?(?:\s*(?:no|number|#))?\.?|txn(?: id)?|transaction id)[:\s#]*([A-Z0-9-]{5,})/i);
   if (sourceOf(item) !== 'bank') {          // a biller's text or email: either "thanks for your payment" or "your bill is due"
     const paid = /thank you for (?:your )?payment|payment (?:of|amounting to)[^.]{0,40}(?:has been |was )?(?:received|posted|credited)|we(?:'ve| have) received your payment|successfully paid|payment received/i.test(text);
-    const due = /\bdue\b|amount due|total amount due|statement of account|your (?:bill|soa)|bill (?:is|amounting)|please pay/i.test(text);
+    const due = /\bdue\b|amount due|total amount due|statement of account|your (?:bill|soa)|bill (?:is|amounting)|please pay|\bbill\b|\bsoa\b|\bbilling\b|e-?statement/i.test(text);
     const k = paid ? 'billpaid' : due ? 'billdue' : null;
-    return { amount, currency, kind: k, party: billerOf(item), due: k === 'billdue' ? billDueOf(item) : null, ref: rm ? rm[1] : null, ok: amount != null && k != null };
+    return { amount, currency, kind: k, party: billerOf(item), due: k === 'billdue' ? billDueOf(item) : null, ref: rm ? rm[1] : null, ok: k != null };   // amount may be missing (subject-only email)
   }
   return { amount, currency, kind, party: pm ? pm[1].trim() : null, ref: rm ? rm[1] : null, ok: amount != null && kind != null };
 }
@@ -742,7 +751,7 @@ function reviewRow(it) {
     return `<div class="rvr" data-a="editInbox" data-id="${it.id}" role="button" tabindex="0">
       <div class="lg src" aria-hidden="true">${IC(src === 'email' ? 'mail' : 'message-square-text', 'sm')}</div>
       <div class="main"><div class="t">${esc(title)}</div><div class="s"><span class="st ${st}">${esc(status)}</span><span class="when">${src === 'email' ? 'Email' : 'Text'} · ${esc(timeOf(it.received_at))}</span></div></div>
-      <div class="amt">${p.amount != null ? (p.kind === 'billpaid' ? '−' : '') + money(p.amount, p.currency) : ''}</div><div class="ra"><button class="rbtn hov" data-a="ignoreInbox" data-id="${it.id}" aria-label="Dismiss">${IC('x', 'sm')}</button></div></div>`;
+      <div class="amt">${p.amount != null ? (p.kind === 'billpaid' ? '−' : '') + money(p.amount, p.currency) : '<span class="faint">Amount?</span>'}</div><div class="ra"><button class="rbtn hov" data-a="ignoreInbox" data-id="${it.id}" aria-label="Dismiss">${IC('x', 'sm')}</button></div></div>`;
   }
   const { p, a, dup, curMismatch, ready, xfer, counted } = inboxCheck(it), bk = bankOf(it), bank = BANKS[bk];
   let title, amtTxt = '', amtCls = '', status = '', st = '';
@@ -1033,7 +1042,7 @@ function vHome() {
   const hidden = !!S.settings.hideAmounts;
   const whole = hidden ? money(w.own) : money(w.own).replace(/\.\d\d$/, ''), cents = hidden ? '' : money(w.own).slice(-3);   // Total balance = money he has; debts shown below it
   const accAll = activeAccounts().filter(a => !isIOU(a)).sort((x, y) => (b[x.id] * (rate(x.currency) ?? 0)) - (b[y.id] * (rate(y.currency) ?? 0)));
-  const ious = iouList(b);
+  const ious = iouList(b), unpaid = unpaidBills(b);
   const accs = accAll.some(a => Math.abs(b[a.id]) > 0.004) ? accAll.filter(a => Math.abs(b[a.id]) > 0.004) : accAll;   // smallest first, biggest in front
   const funded = it => it.accs.some(a => Math.abs(b[a.id]) > 0.004);
   const allItems = walletItems(accAll).sort((x, y) => itemValue(x, b) - itemValue(y, b));
@@ -1071,7 +1080,9 @@ function vHome() {
     </div>
     <div class="c12 only-desk"><div class="sechead"><b class="cap">Wallet</b><a href="#accounts">See all</a></div>
       <div class="cardgrid" style="grid-template-columns:repeat(${cardCols(homeItems.length)},minmax(0,1fr))">${homeItems.slice().reverse().map(it => walletCard(it, b)).join('')}</div></div>
-    ${ious.count ? `<section class="card iou-card c12" style="--o:4"><div class="sh"><b class="cap">IOUs</b><span class="grow"></span><span class="xs faint">Debts and money owed to you</span></div>${ious.html}</section>` : ''}
+    ${unpaid.count && ious.count ? `<div class="c6" style="--o:4">${unpaid.card}</div><div class="c6" style="--o:4"><section class="card iou-card"><div class="sh"><b class="cap">IOUs</b><span class="grow"></span><span class="xs faint">People</span></div>${ious.html}</section></div>`
+      : unpaid.count ? `<div class="c12" style="--o:4">${unpaid.card}</div>`
+      : ious.count ? `<section class="card iou-card c12" style="--o:4"><div class="sh"><b class="cap">IOUs</b><span class="grow"></span><span class="xs faint">People</span></div>${ious.html}</section>` : ''}
     ${quick.length ? `<div class="qcats c12" style="--o:4">${quick.map(c => `<button data-a="quickCat" data-id="${c.id}"><span>${IC(catLucide(c))}</span><b>${esc(c.name.split(/[ &]/)[0])}</b></button>`).join('')}</div>` : ''}
     <a class="rowlink c12" style="--o:6" href="#budget"><span><b>${nBud ? 'Budgets' : 'Set budgets'}</b>${nBud ? `<small>${nBud} set for ${monthName(thisMonth()).split(' ')[0]}</small>` : '<small>Give every peso a job</small>'}</span>${IC('chevron-right')}</a>
     <div class="${recent.length ? 'c6' : 'c12'}" style="--o:7"><section class="card"><div class="sh"><b class="cap">Upcoming</b><span class="grow"></span><a href="#bills" class="xs">All bills</a></div>
@@ -1165,7 +1176,8 @@ function vBills() {
     ${srcs.length ? `<div class="list">${inc.slice(0, 6).map(o => incomeRow(o, o.first)).join('') || '<div class="empty1">No paydays in the next 45 days.</div>'}</div>
       <div class="xs faint" style="margin-top:8px">About ${money(incomePerMonth())} a month from ${srcs.length} source${srcs.length === 1 ? '' : 's'}${srcs.some(x => !num(x.amount)) ? ' (sources marked "Varies" not counted)' : ''}</div>`
       : '<div class="empty1">Add GOOD Hoops, Intelocate and any other pay so Scry knows when money is coming in.</div>'}</section>`;
-  return head + incCard + `<section class="card">${group('Overdue', late)}${group('Next 7 days', soon)}${group('Later', later)}${all.length ? '' : '<div class="empty">No bills yet. Add rent, Meralco, internet, subscriptions…</div>'}</section>
+  const ub = unpaidBills(balances());
+  return head + (ub.count ? `<div class="mb">${ub.card}</div>` : '') + incCard + `<section class="card">${group('Overdue', late)}${group('Next 7 days', soon)}${group('Later', later)}${all.length ? '' : '<div class="empty">No bills yet. Add rent, Meralco, internet, subscriptions…</div>'}</section>
     ${paused.length ? `<section class="card" style="margin-top:var(--gap)"><h2>Paid one-offs & paused</h2><div class="list">${paused.map(b => billRow({ bill: b, date: b.due_date }, false)).join('')}</div></section>` : ''}`;
 }
 function calendar() {
@@ -1195,7 +1207,8 @@ function vAccounts() {
     ${w.missing.length ? `<div class="fine">Not counted: ${w.missing.join(', ')} · <a href="#settings">set rate</a></div>` : ''}</section>
   <div class="cardgrid wallet">${walletItems(list).sort((x, y) => itemValue(y, b) - itemValue(x, b)).map(it => walletCard(it, b)).join('')}
     <button class="bcard addcard" data-a="addAccount">${IC('plus', 'lg')}<span>Add account</span></button></div>
-  ${ious.count ? `<section class="card iou-card" style="margin-top:var(--gap)"><div class="sh"><b class="cap">IOUs</b><span class="grow"></span><span class="xs faint">Debts and money owed to you</span></div>${ious.html}</section>` : ''}`;
+  ${unpaidBills(b).count ? `<div style="margin-top:var(--gap)">${unpaidBills(b).card}</div>` : ''}
+  ${ious.count ? `<section class="card iou-card" style="margin-top:var(--gap)"><div class="sh"><b class="cap">IOUs</b><span class="grow"></span><span class="xs faint">People</span></div>${ious.html}</section>` : ''}`;
 }
 
 function vSettings() {
