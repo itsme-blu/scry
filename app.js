@@ -1375,7 +1375,13 @@ function billForm(b = {}, inboxId = '') {
 function payForm(b, date) {
   const accId = b.account_id || activeAccounts()[0]?.id, cur = curOf(accId), r = rate(cur);
   const amt0 = cur === 'PHP' || !r ? num(b.amount) : num(b.amount) / r;
+  // Open the bank or e-wallet app to actually pay; then come back and log it here.
+  const apps = [...new Set(activeAccounts().filter(a => a.bank && BANK_APP[a.bank]).map(a => a.bank))].filter(k => bankAppLink(k));
+  const payApps = apps.length ? `<div class="payapps"><div class="lbl">1. Pay in your app</div><div class="pa-row">${apps.map(k => { const h = bankAppLink(k);
+    return `<a class="pa" href="${esc(h)}" ${h.startsWith('http') ? 'target="_blank" rel="noopener"' : ''}><img src="${BANK_LOGO[k]}" alt="">${esc(BANK_APP[k].name)}</a>`; }).join('')}</div>
+    <div class="lbl" style="margin-top:14px">2. Then log what you paid</div></div>` : '';
   modal('Pay ' + b.name, `<form class="form" id="payf" onsubmit="return false">
+    ${payApps}
     ${amountField('amount', amt0, cur)}
     <div class="two"><label class="f">Paid from<select name="account_id">${accOptions(accId)}</select></label><label class="f">Date paid<input type="date" name="date" value="${today()}"></label></div>
     <div class="callout">${b.repeat === 'none' ? 'This one-off bill will be marked paid.' : `Next due date moves to <b>${shortDate(nextDate(date, b.repeat))}</b>.`}${b.note ? `<div class="xs faint" style="margin-top:6px">${esc(b.note)}</div>` : ''}</div>

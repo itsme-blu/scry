@@ -982,6 +982,10 @@ body[data-view="penny"] .mhead .brand{visibility:hidden}
 /* v37: the dismiss ✕ is always visible on touch screens */
 @media (hover:none),(pointer:coarse){ .rbtn.hov{opacity:1} }
 .s2-extra{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted)} .s2-extra b{color:var(--ink);font-weight:700}
+.payapps .pa-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px;margin-top:8px}
+.payapps .pa{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:14px;background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--ink);text-decoration:none;font-weight:600;font-size:14px}
+.payapps .pa img{width:26px;height:26px;border-radius:8px;background:#fff;object-fit:contain}
+.payapps .pa:active{transform:scale(.97)}
 </style>
 </head>
 <body>
@@ -990,6 +994,6 @@ body[data-view="penny"] .mhead .brand{visibility:hidden}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
 <script src="config.js?v=3" onerror="void 0"></script>
-<script src="app.js?v=39"></script>
+<script src="app.js?v=40"></script>
 </body>
 </html>
