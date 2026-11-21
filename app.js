@@ -715,6 +715,28 @@ function endDrag() {
 document.addEventListener('pointerup', endDrag);
 document.addEventListener('pointercancel', endDrag);
 
+// Open the bank's own app (Android package IDs checked on Google Play, Nov 21 2026).
+// On Android this launches the app, or opens its Play Store page if it isn't installed. On a PC only Wise has a website.
+const BANK_APP = {
+  gcash: { pkg: 'com.globe.gcash.android', name: 'GCash' },
+  maribank: { pkg: 'ph.seabank.seabank', name: 'MariBank' },
+  gotyme: { pkg: 'ph.com.gotyme', name: 'GoTyme' },
+  wise: { pkg: 'com.transferwise.android', name: 'Wise', web: 'https://wise.com/home' },
+};
+const isAndroid = () => /Android/i.test(navigator.userAgent);
+function bankAppLink(bank) {
+  const app = BANK_APP[bank]; if (!app) return null;
+  if (isAndroid()) {
+    const store = encodeURIComponent(`https://play.google.com/store/apps/details?id=${app.pkg}`);
+    return `intent:#Intent;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;package=${app.pkg};S.browser_fallback_url=${store};end`;
+  }
+  return app.web || null;
+}
+function openAppBtn(bank) {
+  const href = bankAppLink(bank); if (!href) return '';
+  return `<a class="ash-open" href="${esc(href)}" ${href.startsWith('http') ? 'target="_blank" rel="noopener"' : ''}>${IC('external-link', 'sm')} Open ${esc(BANK_APP[bank].name)}${isAndroid() ? ' app' : ''}</a>`;
+}
+
 // Account sheet (tap a card): the bank's own colour, big balance, its transactions, and add buttons for this account.
 const SHEET_TONE = { wise: 'wise', gotyme: 'gotyme', gcash: 'gcash', maribank: 'maribank', cash: 'cash' };
 function sheet(tone, body, foot = '') {
@@ -747,7 +769,7 @@ function acctMenu(id, all = false) {
       <button class="ash-btn" data-a="matchAccount" data-id="${a.id}" aria-label="Match to your bank app">${IC('scale')}</button>
       <button class="ash-btn" data-a="editAccount" data-id="${a.id}" aria-label="Edit account">${IC('pencil')}</button></div>
     <div class="ash-head"><h2>${esc(a.name)}</h2><div class="cap">${esc(ACCOUNT_TYPES[a.type]?.[0] || a.type)} · ${esc(a.currency)}</div></div>
-    <div class="ash-bal"><div class="cap">Current balance</div><div class="v ${bal < 0 ? 'neg' : ''}">${money(bal, a.currency)}</div><div class="ash-match">${matchedLabel(a.id)}</div></div>
+    <div class="ash-bal"><div class="cap">Current balance</div><div class="v ${bal < 0 ? 'neg' : ''}">${money(bal, a.currency)}</div><div class="ash-match">${matchedLabel(a.id)}</div>${openAppBtn(a.bank)}</div>
     <section class="ash-card"><div class="ash-ch"><b class="cap">Transactions</b><span class="grow"></span><span class="xs">${txs.length}</span></div>
       ${shown.length ? shown.map(t => acctTxRow(t, a)).join('') : '<div class="ash-empty">Nothing here yet.</div>'}
       ${!all && txs.length > 6 ? `<button class="ash-more" data-a="sheetAll" data-id="${a.id}">See all ${txs.length} ${IC('chevron-down', 'sm')}</button>` : ''}</section>`,
@@ -759,7 +781,7 @@ function groupMenu(bank) {
   const b = balances(), accs = activeAccounts().filter(a => a.bank === bank), g = groupTotal(accs, b);
   sheet(SHEET_TONE[bank] || 'other', `<div class="ash-top"><button class="ash-btn" data-a="close" aria-label="Close">${IC('x')}</button></div>
     <div class="ash-head"><h2>${esc(BANKS[bank]?.name || 'Accounts')}</h2><div class="cap">${accs.length} accounts</div></div>
-    <div class="ash-bal"><div class="cap">Total in pesos</div><div class="v">${money(g.t)}</div>${g.missing ? '<div class="ash-match">Some currencies have no rate yet</div>' : ''}</div>
+    <div class="ash-bal"><div class="cap">Total in pesos</div><div class="v">${money(g.t)}</div>${g.missing ? '<div class="ash-match">Some currencies have no rate yet</div>' : ''}${openAppBtn(bank)}</div>
     <section class="ash-card">${accs.map(a => `<button class="atx" data-a="openAcct" data-id="${a.id}"><span class="ic cur">${esc(a.currency)}</span><span class="main"><b>${esc(a.name)}</b><small>${matchedLabel(a.id)}</small></span><span class="amt">${money(b[a.id], a.currency)}</span>${IC('chevron-right', 'sm')}</button>`).join('')}</section>
     ${accs.some(a => rate(a.currency) == null) ? `<div class="ash-match" style="margin-top:12px">${accs.filter(a => rate(a.currency) == null).map(a => a.currency).join(', ')} not in the total yet · <a href="#settings" data-a="close">set the rate</a></div>` : ''}`);
 }
