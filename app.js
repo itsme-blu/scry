@@ -333,15 +333,23 @@ function upcomingIncome(days) {
 // Pay can be in another currency than the account it lands in (Intelocate pays US$ by the hour into Wise).
 const incCur = i => i.pay_cur || curOf(i.account_id);
 const incAmt = i => num(i.hourly) && num(i.hours) ? num(i.hourly) * num(i.hours) : num(i.amount);
+// Pay whose hours change (GOOD Hoops): estimate from the last 3 paydays he logged, in the account's currency.
+function incAvg(i) {
+  const n = norm(i.name), past = S.d.transactions.filter(t => t.kind === 'income' && t.account_id === i.account_id && norm(t.note) === n).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 3);
+  return past.length ? { v: past.reduce((s, t) => s + num(t.amount), 0) / past.length, n: past.length } : null;
+}
 const incInAcc = i => { const v = incAmt(i), pc = incCur(i), ac = curOf(i.account_id); if (pc === ac) return v; const r1 = rate(pc), r2 = rate(ac); return r1 && r2 ? Math.round(v * r1 / r2 * 100) / 100 : null; };
-const incomePerMonth = () => incomes().reduce((s, i) => s + incAmt(i) * ({ weekly: 52 / 12, biweekly: 26 / 12, semimonthly: 2, monthly: 1 }[i.every] || 0) * (rate(incCur(i)) ?? 0), 0);
+const incomePerMonth = () => incomes().reduce((s, i) => { const f = { weekly: 52 / 12, biweekly: 26 / 12, semimonthly: 2, monthly: 1 }[i.every] || 0;
+  if (incAmt(i)) return s + incAmt(i) * f * (rate(incCur(i)) ?? 0);
+  const av = incAvg(i); return s + (av ? av.v * f * (rate(curOf(i.account_id)) ?? 0) : 0); }, 0);
 function incomeRow(o, withLog = true) {
   const i = o.inc, a = acc(i.account_id), dd = daysBetween(today(), o.date);
   const when = o.late ? `<span class="badge warn">${-dd === 1 ? '1 day ago' : -dd + ' days ago'}</span>` : dd === 0 ? '<span class="badge ok">Today</span>' : dd === 1 ? '<span class="badge ok">Tomorrow</span>' : '';
   return `<div class="item click inc-row" data-a="editIncome" data-id="${i.id}" role="button" tabindex="0">${dateBox(o.date, false)}
     <div class="main"><div class="t">${esc(i.name)}${dbBadge(i.tag)}</div><div class="s">${esc(INCOME_REPEAT[i.every] || '')}${a ? ' · into ' + esc(a.name) : ''}</div></div>
     ${when}<div class="amt pos">${(() => { const v = incAmt(i), pc = incCur(i), ac = a?.currency || 'PHP', cv = incInAcc(i);
-      if (!v) return 'Varies';
+      if (!v) { const av = incAvg(i);
+        return `${av ? '≈' + money(av.v, ac) : 'Varies'}<small class="inc-sub">${num(i.hourly) ? `${money(num(i.hourly), pc)}/hr · ` : ''}${av ? `avg of last ${av.n}` : 'hours vary'}</small>`; }
       if (pc === ac) return '+' + money(v, ac);
       return `${cv != null ? '+≈' + money(cv, ac) : '+' + money(v, pc)}<small class="inc-sub">${money(v, pc)}${num(i.hourly) ? ` · ${money(num(i.hourly), pc)}/hr × ${num(i.hours)}h` : ''}</small>`; })()}</div>${withLog ? `<button class="btn sm inc-log" data-a="logIncome" data-id="${i.id}" data-date="${o.date}" aria-label="Log ${esc(i.name)} pay">${IC('download', 'sm')} Log</button>` : ''}</div>`;
 }
@@ -1218,8 +1226,9 @@ function vBills() {
   const inc = upcomingIncome(45), srcs = incomes();
   const incCard = `<section class="card mb inc-card"><h2>Income coming in <small><button class="btn sm" data-a="addIncome">${IC('plus', 'sm')} Add income</button></small></h2>
     ${srcs.length ? `<div class="list">${inc.slice(0, 6).map(o => incomeRow(o, o.first)).join('') || '<div class="empty1">No paydays in the next 45 days.</div>'}</div>
-      <div class="xs faint" style="margin-top:8px">About ${money(incomePerMonth())} a month from ${srcs.length} source${srcs.length === 1 ? '' : 's'}${srcs.some(x => !num(x.amount)) ? ' (sources marked "Varies" not counted)' : ''}</div>`
+      <div class="xs faint" style="margin-top:8px">About ${money(incomePerMonth())} a month from ${srcs.length} source${srcs.length === 1 ? '' : 's'}${srcs.some(x => !num(x.amount) && !incAvg(x)) ? ' (pay that varies counts once you have logged a payday)' : ''}</div>`
       : '<div class="empty1">Add GOOD Hoops, Intelocate and any other pay so Scry knows when money is coming in.</div>'}
+    ${srcs.some(x => /good ?hoops/i.test(x.name)) ? '' : `<button class="inc-suggest" data-a="suggestGoodHoops">${IC('sparkles', 'sm')}<span><b>Add your GOOD Hoops pay</b><small>US$8/hr · hours vary · every 2 weeks · into Wise</small></span>${IC('chevron-right', 'sm')}</button>`}
     ${srcs.some(x => /intelocate|summit/i.test(x.name)) ? '' : `<button class="inc-suggest" data-a="suggestIntelocate">${IC('sparkles', 'sm')}<span><b>Add your Intelocate pay</b><small>US$6/hr · 80 hrs every 2 weeks · into Wise · next Dec 5</small></span>${IC('chevron-right', 'sm')}</button>`}</section>`;
   const ub = unpaidBills(balances());
   return head + (ub.count ? `<div class="mb">${ub.card}</div>` : '') + incCard + `<section class="card">${group('Overdue', late)}${group('Next 7 days', soon)}${group('Later', later)}${all.length ? '' : '<div class="empty">No bills yet. Add rent, Meralco, internet, subscriptions…</div>'}</section>
@@ -1725,6 +1734,11 @@ const A = {
   async archiveAccount(el) { if (!confirm('Archive this account? Its history stays.')) return; await safe(() => DB.update('accounts', el.dataset.id, { archived: true })); closeModal(); render(); },
   addBill: () => billForm(),
   addIncome: () => activeAccounts().length ? incomeForm() : (toast('Add an account first'), accountForm()),
+  suggestGoodHoops: () => {
+    const wise = activeAccounts().find(a => a.bank === 'wise' && a.currency === 'PHP') || activeAccounts().find(a => a.bank === 'wise');
+    incomeForm({ name: 'GOOD Hoops', pay_cur: 'USD', hourly: 8, account_id: wise?.id, every: 'biweekly', tag: 'personal' });
+    toast('Set the next payday, then Save');
+  },
   suggestIntelocate: () => {
     const wise = activeAccounts().find(a => a.bank === 'wise' && a.currency === 'PHP') || activeAccounts().find(a => a.bank === 'wise');
     incomeForm({ name: 'Intelocate (Summit Stride)', pay_cur: 'USD', hourly: 6, hours: 80, account_id: wise?.id, every: 'biweekly', next: '2026-12-05', tag: 'personal' });
