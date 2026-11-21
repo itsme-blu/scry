@@ -653,7 +653,10 @@ function vHome() {
       ${accs.map(a => `<div class="arow" data-a="openAccount" data-id="${a.id}" role="button" tabindex="0"><div class="lg">${accIcon(a, 40)}</div><div class="main"><div class="t">${esc(a.name)}</div><div class="s">${ACCOUNT_TYPES[a.type]?.[0] || ''}</div></div><div class="amt ${b[a.id] < 0 ? 'neg' : ''}">${money(b[a.id], a.currency)}</div></div>`).join('') || '<div class="empty1">No accounts yet. <a href="#" data-a="addAccount">Add your first</a></div>'}
       ${accAll.length > accs.length ? `<a class="more" href="#accounts">${accAll.length - accs.length} more with nothing in them</a>` : ''}</section>
     <div class="c12 only-desk"><div class="sechead"><b>Accounts</b><a href="#accounts">See all</a></div>
-    <div class="acc-strip">${accs.map(a => `<div class="acc-tile" data-a="openAccount" data-id="${a.id}" role="button" tabindex="0"><div class="lg">${accIcon(a, 36)}</div><div class="t">${esc(a.name)}</div><div class="m ${b[a.id] < 0 ? 'neg' : ''}">${money(b[a.id], a.currency).replace(/\.00$/, '')}</div></div>`).join('') || '<div class="empty">No accounts yet. <a href="#" data-a="addAccount">Add your first</a></div>'}</div></div>
+    <div class="acc-strip cards">${accs.map(a => `<div class="bcard" data-brand="${a.bank || (a.type === 'cash' ? 'cash' : 'other')}" data-a="openAccount" data-id="${a.id}" role="button" tabindex="0" aria-label="${esc(a.name)}, ${money(b[a.id], a.currency)}">
+      <div class="top"><span class="lg">${accIcon(a, 34)}</span><span class="ty">${ACCOUNT_TYPES[a.type]?.[0] || ''}</span></div>
+      <span class="chip" aria-hidden="true"></span>
+      <div class="bot"><div class="t">${esc(a.name)}</div><div class="m">${money(b[a.id], a.currency)}</div></div></div>`).join('') || '<div class="empty">No accounts yet. <a href="#" data-a="addAccount">Add your first</a></div>'}</div></div>
     ${pairBR}
     ${pairBW}
   </div>`;

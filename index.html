@@ -564,6 +564,29 @@ details.orig div{margin-top:8px;padding:10px 12px;border-radius:14px;background:
   .fab{display:none!important}
   .modal .addgrid{margin-bottom:4px}
 }
+/* ===== v14: accounts as bank cards (PC Home) ===== */
+.acc-strip.cards{gap:18px}
+.bcard{position:relative;aspect-ratio:1.586/1;border-radius:20px;padding:18px 20px;display:flex;flex-direction:column;justify-content:space-between;cursor:pointer;overflow:hidden;color:#fff;
+  background:linear-gradient(135deg,#6C63FF,#3B33B8);box-shadow:0 14px 32px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.25);transition:transform .15s,box-shadow .15s;min-width:0}
+.bcard::before{content:"";position:absolute;inset:0;background:radial-gradient(120% 80% at 100% 0%,rgba(255,255,255,.28),transparent 55%),radial-gradient(90% 70% at 0% 120%,rgba(0,0,0,.25),transparent 60%);pointer-events:none}
+.bcard::after{content:"";position:absolute;right:-30%;bottom:-55%;width:90%;aspect-ratio:1;border-radius:50%;border:28px solid rgba(255,255,255,.07);pointer-events:none}
+.bcard:hover{transform:translateY(-3px);box-shadow:0 20px 40px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.25)}
+.bcard>*{position:relative;z-index:1}
+.bcard .top{display:flex;justify-content:space-between;align-items:flex-start}
+.bcard .lg{width:34px;height:34px;border-radius:10px;overflow:hidden;background:#fff;display:grid;place-items:center;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.bcard .lg img{width:100%;height:100%;object-fit:contain}
+.bcard .ty{font:600 11px var(--body);letter-spacing:.08em;text-transform:uppercase;opacity:.85}
+.bcard .chip{width:38px;height:28px;border-radius:6px;background:linear-gradient(135deg,#F6DFA0,#C9A24E);box-shadow:inset 0 0 0 1px rgba(0,0,0,.15);
+  background-image:linear-gradient(90deg,transparent 45%,rgba(0,0,0,.18) 45% 55%,transparent 55%),linear-gradient(0deg,transparent 30%,rgba(0,0,0,.14) 30% 36%,transparent 36% 64%,rgba(0,0,0,.14) 64% 70%,transparent 70%),linear-gradient(135deg,#F6DFA0,#C9A24E)}
+.bcard .t{font:600 13px var(--body);opacity:.9}
+.bcard .m{font:800 24px var(--display);letter-spacing:-.02em;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 2px rgba(0,0,0,.2)}
+.bcard[data-brand="maribank"]{background:linear-gradient(135deg,#FF8A2A,#E2480E 70%,#B8350A)}
+.bcard[data-brand="gcash"]{background:linear-gradient(135deg,#2F7BFF,#0A4FE0 65%,#0638A8)}
+.bcard[data-brand="gotyme"]{background:linear-gradient(135deg,#1DE0E6,#0AA4B2 60%,#077A86)}
+.bcard[data-brand="wise"]{background:linear-gradient(135deg,#B6F28A,#7DD94F 60%,#52B52C);color:#163300}
+.bcard[data-brand="wise"] .m{text-shadow:none}
+.bcard[data-brand="cash"]{background:linear-gradient(135deg,#2BB07A,#178A5C 60%,#0E6544)}
+.bcard[data-brand="cash"] .lg{background:#0E3B2A}
 </style>
 </head>
 <body>
@@ -572,6 +595,6 @@ details.orig div{margin-top:8px;padding:10px 12px;border-radius:14px;background:
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
 <script src="config.js?v=3" onerror="void 0"></script>
-<script src="app.js?v=13"></script>
+<script src="app.js?v=14"></script>
 </body>
 </html>
