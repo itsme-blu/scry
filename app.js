@@ -221,7 +221,7 @@ function balances() {
 function worth() {
   const b = balances(); let own = 0, owe = 0; const missing = new Set();
   for (const a of activeAccounts()) {
-    const r = rate(a.currency); if (r == null) { missing.add(a.currency); continue; }
+    const r = rate(a.currency); if (r == null) { if (Math.abs(b[a.id]) > 0.004) missing.add(a.currency); continue; }   // only flag a missing rate when that money matters
     const v = b[a.id] * r; if (v >= 0) own += v; else owe += v;
   }
   return { own, owe, net: own + owe, missing: [...missing] };
@@ -1013,7 +1013,7 @@ function vHome() {
   const w = worth(), mt = monthTotals(thisMonth()), up = upcoming(45), b = balances();
   const nm = String(S.user?.user_metadata?.own_names || '').split(',')[0].trim().split(' ')[0] || 'Blu';
   const hidden = !!S.settings.hideAmounts;
-  const whole = hidden ? money(w.net) : money(w.net).replace(/\.\d\d$/, ''), cents = hidden ? '' : money(w.net).slice(-3);
+  const whole = hidden ? money(w.own) : money(w.own).replace(/\.\d\d$/, ''), cents = hidden ? '' : money(w.own).slice(-3);   // Total balance = money he has; debts shown below it
   const accAll = activeAccounts().slice().sort((x, y) => (b[x.id] * (rate(x.currency) ?? 0)) - (b[y.id] * (rate(y.currency) ?? 0)));
   const accs = accAll.some(a => Math.abs(b[a.id]) > 0.004) ? accAll.filter(a => Math.abs(b[a.id]) > 0.004) : accAll;   // smallest first, biggest in front
   const funded = it => it.accs.some(a => Math.abs(b[a.id]) > 0.004);
@@ -1031,8 +1031,8 @@ function vHome() {
     <section class="card hero balance lux c7" style="--o:1"><span class="lux-guil" aria-hidden="true"></span><span class="lux-sheen" aria-hidden="true"></span><img class="lux-mark" src="brand/scry-mark.svg" alt="">
       <div class="bh"><span class="cap k">Total balance</span><span class="grow"></span>
         <button class="eye" data-a="toggleHide" aria-label="${hidden ? 'Show amounts' : 'Hide amounts'}" aria-pressed="${hidden}">${IC(hidden ? 'eye-off' : 'eye', 'sm')}</button></div>
-      <div class="v ${w.net < 0 ? 'neg' : ''}">${whole}<small>${cents}</small></div>
-      <div class="bmeta">${w.owe < 0 ? `<span class="owe">${IC('trending-down', 'sm')} You owe ${money(-w.owe)}</span>` : `<span class="ok">${IC('shield-check', 'sm')} Nothing owed</span>`}${w.missing.length ? `<span class="dot">·</span><span>Excludes ${w.missing.join(', ')}</span><span class="dot">·</span><a href="#settings">set rate</a>` : ''}</div>
+      <div class="v">${whole}<small>${cents}</small></div>
+      <div class="bmeta">${w.owe < 0 ? `<span class="owe">${IC('trending-down', 'sm')} You owe ${money(-w.owe)}</span><span class="dot">·</span><span>Net worth ${money(w.net)}</span>` : `<span class="ok">${IC('shield-check', 'sm')} Nothing owed</span>`}${w.missing.length ? `<span class="dot">·</span><span>Excludes ${w.missing.join(', ')}</span><span class="dot">·</span><a href="#settings">set rate</a>` : ''}</div>
       <div class="bscope">${tagChips()}</div>
       <div class="hq only-desk"><button class="btn pri" data-a="addTx">${IC('plus', 'sm')} Add</button><button class="btn" data-a="scan">${IC('scan-line', 'sm')} Scan</button><button class="btn" data-a="addTransfer">${IC('arrow-left-right', 'sm')} Transfer</button><a class="btn" href="#bills">${IC('receipt', 'sm')} Pay bill</a></div>
     </section>
