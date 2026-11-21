@@ -1330,9 +1330,9 @@ function vAccounts() {
   const list = activeAccounts().filter(a => !isIOU(a)).sort((x, y) => (b[y.id] * (rate(y.currency) ?? 0)) - (b[x.id] * (rate(x.currency) ?? 0)));
   const ious = iouList(b);
   return ph('Wallet', 'Wallet', 'Tap a card to see its activity or match it to your bank app', '<button class="btn pri" data-a="addAccount">+ Add account</button>')
-  + `<section class="card hero networth mb"><div class="bh"><span class="cap k">Net worth</span><span class="grow"></span><button class="eye" data-a="toggleHide" aria-label="Hide or show amounts">${IC(S.settings.hideAmounts ? 'eye-off' : 'eye', 'sm')}</button></div>
-    <div class="v">${money(w.net)}</div>
-    <div class="nw2"><div><span>Money you have</span><b>${money(w.own)}</b></div><div><span>You owe</span><b>${money(-w.owe)}</b></div>${w.owed > 0 ? `<div><span>Owed to you</span><b>${money(w.owed)}</b></div>` : ''}</div>
+  + `<section class="card hero networth mb"><div class="bh"><span class="cap k">Total balance</span><span class="grow"></span><button class="eye" data-a="toggleHide" aria-label="Hide or show amounts">${IC(S.settings.hideAmounts ? 'eye-off' : 'eye', 'sm')}</button></div>
+    <div class="v">${money(w.own)}</div>
+    <div class="nw2 four"><div><span>Net worth</span><b class="${w.net < 0 ? 'neg' : ''}">${money(w.net)}</b></div><button class="nwb" data-a="safeInfo"><span>Safe to spend</span><b class="${safeToSpend().safe < 0 ? 'neg' : ''}">${money(safeToSpend().safe)}</b></button><div><span>I owe</span><b>${money(-w.owe)}</b></div><div><span>Owed to me</span><b>${money(w.owed)}</b></div></div>
     ${w.missing.length ? `<div class="fine">Not counted: ${w.missing.join(', ')} · <a href="#settings">set rate</a></div>` : ''}</section>
   <div class="cardgrid wallet">${walletItems(list).sort((x, y) => itemValue(y, b) - itemValue(x, b)).map(it => walletCard(it, b)).join('')}
     <button class="bcard addcard" data-a="addAccount">${IC('plus', 'lg')}<span>Add account</span></button></div>

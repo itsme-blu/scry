@@ -1017,6 +1017,12 @@ body[data-view="penny"] .mhead .brand{visibility:hidden}
   .nw2>div:nth-child(3):last-child{grid-column:1/-1}
   .nw2 b{font-size:clamp(15px,4.6vw,18px)}
 }
+/* v54: Wallet hero = total balance, with four equal boxes under it */
+.nw2.four{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+.nw2.four>*:nth-child(3):last-child{grid-column:auto}
+.nw2 .nwb{all:unset;box-sizing:border-box;cursor:pointer;min-width:0;padding:12px 14px;border-radius:16px;background:rgba(255,255,255,.07);border:1px solid var(--line)}
+.nw2 b.neg{color:#F7A896}
+@media (min-width:900px){ .nw2.four{grid-template-columns:repeat(4,minmax(0,1fr))!important} }
 .qcats{grid-template-columns:repeat(4,minmax(0,1fr))} .qcats button{min-width:0;box-sizing:border-box}
 @media (max-width:380px){
   .item>.badge{display:none}
@@ -1031,6 +1037,6 @@ body[data-view="penny"] .mhead .brand{visibility:hidden}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
 <script src="config.js?v=3" onerror="void 0"></script>
-<script src="app.js?v=53"></script>
+<script src="app.js?v=54"></script>
 </body>
 </html>
