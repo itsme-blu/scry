@@ -415,6 +415,11 @@ function parseNotif(item) {
   const pm = pq || text.match(/\b(?:from|to|at)\s+([A-Z0-9][A-Za-z0-9&'.\- ]{1,40}?)(?=\s+(?:on|with|via|using|ref|reference|has|is|was|and|for)\b|\s*[,!(•]|\.(?:\s+[a-z]|\s*$)|$)/);
   const rm = text.match(/(?:ref(?:erence)?(?:\s*(?:no|number|#))?\.?|txn(?: id)?|transaction id)[:\s#]*([A-Z0-9-]{5,})/i);
   if (sourceOf(item) !== 'bank') {          // a biller's text or email: either "thanks for your payment" or "your bill is due"
+    if (amount == null) {                   // billers often write a bare number: "amount due 1,599.00", "total of 6147.61"
+      const near = text.match(/(?:amount|total|balance|bill|due|payment|pay|amt)\b[^0-9]{0,30}?([0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]{1,2})?|[0-9]+\.[0-9]{2})/i)
+        || text.match(/(?<![0-9/.-])([0-9]{1,3}(?:,[0-9]{3})+\.[0-9]{2}|[0-9]+\.[0-9]{2})(?![0-9/])/);   // else any money-looking number with centavos
+      if (near) amount = Number(near[1].replace(/,/g, ''));
+    }
     const paid = /thank you for (?:your )?payment|payment (?:of|amounting to)[^.]{0,40}(?:has been |was )?(?:received|posted|credited)|we(?:'ve| have) received your payment|successfully paid|payment received/i.test(text);
     const due = /\bdue\b|amount due|total amount due|statement of account|your (?:bill|soa)|bill (?:is|amounting)|please pay|\bbill\b|\bsoa\b|\bbilling\b|e-?statement/i.test(text);
     const k = paid ? 'billpaid' : due ? 'billdue' : null;
@@ -1229,7 +1234,7 @@ function vSettings() {
           <ol class="small muted" style="line-height:1.75;padding-left:18px">
             <li>Install <b>MacroDroid</b> from the Play Store, open it, tap <b>Add Macro</b>, name it <b>Scry</b>.</li>
             <li><b>Trigger</b> → Device Events → <b>Notification</b> → <b>Notification Received</b> → <b>Select application(s)</b>: GCash, MariBank, GoTyme, Wise. Allow notification access when Android asks.</li>
-            <li><b>Required filter</b>, same screen: text content → <b>Matches</b>, tick <b>Regex</b>, paste:<br><code>(?is)^(?!.*(otp|one.?time|verif|passcode|password|\bpin\b|mpin|do not share)).*(PHP|₱|USD|CAD|SGD|\bP ?[0-9]).*$</code><br>Only money notifications without login words ever leave your phone.</li>
+            <li><b>Required filter</b>, same screen: text content → <b>Matches</b>, tick <b>Regex</b>, paste:<br><code>(?is)^(?!.*(otp|one.?time|verif|passcode|password|\bpin\b|mpin|do not share)).*(PHP|₱|USD|CAD|SGD|\bP ?[0-9]|bill|due|payment|statement|soa|amount).*$</code><br>Only money and bill notifications without login words ever leave your phone.</li>
             <li><b>Action</b> → Web Interactions → <b>HTTP Request</b>. Method <b>POST</b>. URL: <code>${esc(url)}/functions/v1/ingest</code></li>
             <li><b>Query Params</b> tab, add five: <code>key</code> = your phone key · <code>app</code> = {not_app_name} · <code>pkg</code> = {not_app_package} · <code>title</code> = {not_title} · <code>text</code> = {notification}. Use the magic-text button to insert the {…} items.</li>
             <li>Save. Pay ₱1 with GCash: it should show in <b>To review</b> within a minute.</li>
