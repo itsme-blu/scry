@@ -1003,6 +1003,26 @@ body[data-view="penny"] .mhead .brand{visibility:hidden}
 .safe-sheet .ssr:first-child{border-top:0} .safe-sheet .ssr.sub{color:var(--muted);font-size:14px} .safe-sheet .ssr small{color:var(--faint);margin-left:6px}
 .safe-sheet .ssr.tot{border-top:1px solid var(--line);font-weight:700;font-size:16px} .safe-sheet .ssr.tot b{color:#9FE6C8} .safe-sheet .ssr.tot b.neg{color:#F7A896}
 .safe-sheet p{margin:10px 0 0}
+/* v53: nothing spills out of its box. tools/overflow_check.py checks every page at phone widths before each publish. */
+.item .t:has(.tn){display:flex;align-items:center;gap:6px;min-width:0}
+.item .t .tn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.item .t .badge{flex:none}
+.rvr .s .when{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.nw2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.nw2:has(> div:nth-child(3)){grid-template-columns:repeat(3,minmax(0,1fr))}
+.nw2>div{min-width:0}
+.nw2 span,.nw2 b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:560px){
+  .nw2:has(> div:nth-child(3)){grid-template-columns:repeat(2,minmax(0,1fr))}
+  .nw2>div:nth-child(3):last-child{grid-column:1/-1}
+  .nw2 b{font-size:clamp(15px,4.6vw,18px)}
+}
+.qcats{grid-template-columns:repeat(4,minmax(0,1fr))} .qcats button{min-width:0;box-sizing:border-box}
+@media (max-width:380px){
+  .item>.badge{display:none}
+  /* the Daybreak tag shrinks to a gold dot when the row has no room for the word */
+  .item .t .badge.db{font-size:0;width:8px;height:8px;padding:0;border-radius:50%;background:var(--sun-soft)}
+}
 </style>
 </head>
 <body>
@@ -1011,6 +1031,6 @@ body[data-view="penny"] .mhead .brand{visibility:hidden}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
 <script src="config.js?v=3" onerror="void 0"></script>
-<script src="app.js?v=52"></script>
+<script src="app.js?v=53"></script>
 </body>
 </html>

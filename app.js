@@ -346,7 +346,7 @@ function incomeRow(o, withLog = true) {
   const i = o.inc, a = acc(i.account_id), dd = daysBetween(today(), o.date);
   const when = o.late ? `<span class="badge warn">${-dd === 1 ? '1 day ago' : -dd + ' days ago'}</span>` : dd === 0 ? '<span class="badge ok">Today</span>' : dd === 1 ? '<span class="badge ok">Tomorrow</span>' : '';
   return `<div class="item click inc-row" data-a="editIncome" data-id="${i.id}" role="button" tabindex="0">${dateBox(o.date, false)}
-    <div class="main"><div class="t">${esc(i.name)}${dbBadge(i.tag)}</div><div class="s">${esc(INCOME_REPEAT[i.every] || '')}${a ? ' · into ' + esc(a.name) : ''}</div></div>
+    <div class="main"><div class="t"><span class="tn">${esc(i.name)}</span>${dbBadge(i.tag)}</div><div class="s">${esc(INCOME_REPEAT[i.every] || '')}${a ? ' · into ' + esc(a.name) : ''}</div></div>
     ${when}<div class="amt pos">${(() => { const v = incAmt(i), pc = incCur(i), ac = a?.currency || 'PHP', cv = incInAcc(i);
       if (!v) { const av = incAvg(i);
         return `${av ? '≈' + money(av.v, ac) : 'Varies'}<small class="inc-sub">${num(i.hourly) ? `${money(num(i.hourly), pc)}/hr · ` : ''}${av ? `avg of last ${av.n}` : 'hours vary'}</small>`; }
@@ -811,7 +811,7 @@ function txRow(t) {
     amt = (t.kind === 'income' ? '+' : '−') + money(num(t.amount), cur); cls = t.kind === 'income' ? 'pos' : '';
   }
   return `<div class="item click" data-a="editTx" data-id="${t.id}" role="button" tabindex="0"><div class="ico">${isAdj(t) ? IC('scale', 'sm') : t.kind === 'transfer' ? '⇄' : catIcon(c)}</div>
-    <div class="main"><div class="t">${esc(title)}${dbBadge(t.tag)}</div><div class="s">${sub}</div></div>
+    <div class="main"><div class="t"><span class="tn">${esc(title)}</span>${dbBadge(t.tag)}</div><div class="s">${sub}</div></div>
     <div class="amt ${cls}">${amt}</div></div>`;
 }
 function dateBox(date, late) {
@@ -822,7 +822,7 @@ function billRow(o, withPay = true) {
   const b = o.bill, dd = daysBetween(today(), o.date);
   const when = o.late ? `<span class="badge risk">${-dd === 1 ? '1 day late' : -dd + ' days late'}</span>` : dd === 0 ? '<span class="badge db">Due today</span>' : dd === 1 ? '<span class="badge db">Tomorrow</span>' : dd <= 7 ? `<span class="badge db">In ${dd} days</span>` : '';
   return `<div class="item click" data-a="editBill" data-id="${b.id}" role="button" tabindex="0">${dateBox(o.date, o.late)}
-    <div class="main"><div class="t">${esc(b.name)}${dbBadge(b.tag)}</div><div class="s">${esc(b.repeat === 'none' ? 'One-off' : b.repeat[0].toUpperCase() + b.repeat.slice(1))}${b.autopay ? ' · auto-pay' : ''}${b.account_id && acc(b.account_id) ? ' · ' + esc(acc(b.account_id).name) : ''}</div></div>
+    <div class="main"><div class="t"><span class="tn">${esc(b.name)}</span>${dbBadge(b.tag)}</div><div class="s">${esc(b.repeat === 'none' ? 'One-off' : b.repeat[0].toUpperCase() + b.repeat.slice(1))}${b.autopay ? ' · auto-pay' : ''}${b.account_id && acc(b.account_id) ? ' · ' + esc(acc(b.account_id).name) : ''}</div></div>
     ${when}<div class="amt">${money(num(b.amount))}</div>${withPay ? `<button class="btn sm" data-a="payBill" data-id="${b.id}" data-date="${o.date}" aria-label="Log payment for ${esc(b.name)}">Pay</button>` : ''}</div>`;
 }
 
