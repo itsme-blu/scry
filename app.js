@@ -1337,7 +1337,7 @@ function vAccounts() {
   <div class="cardgrid wallet">${walletItems(list).sort((x, y) => itemValue(y, b) - itemValue(x, b)).map(it => walletCard(it, b)).join('')}
     <button class="bcard addcard" data-a="addAccount">${IC('plus', 'lg')}<span>Add account</span></button></div>
   ${unpaidBills(b).count ? `<div style="margin-top:var(--gap)">${unpaidBills(b).card}</div>` : ''}
-  ${ious.count ? `<section class="card iou-card" style="margin-top:var(--gap)"><div class="sh"><b class="cap">IOUs</b><span class="grow"></span><span class="xs faint">People</span></div>${ious.html}</section>` : ''}`;
+  ${ious.count ? `<section class="card iou-card wal" style="margin-top:var(--gap)"><div class="sh"><b class="cap">IOUs</b><span class="grow"></span><span class="xs faint">People</span></div>${ious.html}</section>` : ''}`;
 }
 
 function vSettings() {
@@ -1381,11 +1381,11 @@ function vSettings() {
         <button class="btn" data-a="simulate">Test</button></div>
       <div id="simOut" class="small" style="margin-top:10px" aria-live="polite"></div></section>
 
-    <section class="card"><h2>Exchange rates <small>pesos per 1 unit</small></h2>
-      <div class="grid g2" style="gap:8px 16px">${['USD', 'CAD', 'SGD', 'EUR', 'GBP', 'AUD'].map(c => `<div class="row" style="gap:10px;justify-content:space-between"><span class="muted">${c}</span><b>${S.settings.rates[c] ? '₱' + num(S.settings.rates[c]).toFixed(2) : '–'}</b></div>`).join('')}</div>
+    <section class="card span2"><h2>Exchange rates <small>pesos per 1 unit</small></h2>
+      <div class="ratesg">${['USD', 'CAD', 'SGD', 'EUR', 'GBP', 'AUD'].map(c => `<div class="row" style="gap:10px;justify-content:space-between"><span class="muted">${c}</span><b>${S.settings.rates[c] ? '₱' + num(S.settings.rates[c]).toFixed(2) : '–'}</b></div>`).join('')}</div>
       <p class="xs faint" style="margin:10px 0 0">${S.settings.ratesDate ? `Market rate of ${shortDate(S.settings.ratesDate)}, updated by itself every day.` : 'Updates by itself from the daily market rate.'} Wise converts at about this rate, minus its small fee.</p></section>
 
-    <section class="card"><h2>Categories <small><a href="#" data-a="addCat">+ Add</a></small></h2>
+    <section class="card span2"><h2>Categories <small><a href="#" data-a="addCat">+ Add</a></small></h2>
       ${['expense', 'income'].map(k => `<div class="lbl" style="margin:4px 0 8px">${k === 'expense' ? 'Spending' : 'Income'}</div><div class="catpick" style="margin-bottom:12px">${catsOf(k).map(c => `<button data-a="editCat" data-id="${c.id}">${catIcon(c)} ${esc(c.name)}</button>`).join('')}</div>`).join('')}</section>
 
     <section class="card span2"><h2>Your data</h2><div class="row"><button class="btn" data-a="exportCsv">Export transactions (CSV)</button><button class="btn" data-a="exportJson">Back up everything (JSON)</button><span class="grow"></span>
