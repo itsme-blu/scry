@@ -992,6 +992,17 @@ body[data-view="penny"] .mhead .brand{visibility:hidden}
 .inc-sub{display:block;font:500 11px var(--body);color:var(--faint);margin-top:2px;text-align:right}
 .inc-suggest{all:unset;box-sizing:border-box;cursor:pointer;display:grid;grid-template-columns:18px minmax(0,1fr) 16px;gap:12px;align-items:center;width:100%;margin-top:10px;padding:12px 14px;border-radius:14px;border:1px dashed var(--line);background:rgba(67,211,162,.06)}
 .inc-suggest b{display:block;font-size:14px} .inc-suggest small{font-size:12px;color:var(--faint)}
+/* v52: safe to spend + payday plan */
+.balance .safe{all:unset;box-sizing:border-box;cursor:pointer;display:flex;align-items:center;gap:10px;width:100%;margin-top:14px;padding:10px 14px;border-radius:14px;background:rgba(67,211,162,.10);border:1px solid rgba(67,211,162,.28);position:relative;z-index:1}
+.balance .safe .sl{flex:1;font-size:13px;color:var(--muted)} .balance .safe b{font:700 18px var(--display);font-variant-numeric:tabular-nums;color:#9FE6C8}
+.balance .safe.neg{background:rgba(240,144,123,.10);border-color:rgba(240,144,123,.3)} .balance .safe.neg b{color:#F7A896}
+.payday{display:flex;align-items:center;gap:14px;flex-wrap:wrap;border:1px solid rgba(232,192,108,.35);background:linear-gradient(135deg,rgba(232,192,108,.12),rgba(232,192,108,.03))}
+.payday .pd-ic{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;background:rgba(232,192,108,.18);color:var(--gold-1);flex:none}
+.payday .main{flex:1;min-width:200px} .payday .main b{display:block;font-size:15px} .payday .main small{font-size:12.5px;color:var(--muted)}
+.safe-sheet .ssr{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid var(--line-soft);font-variant-numeric:tabular-nums}
+.safe-sheet .ssr:first-child{border-top:0} .safe-sheet .ssr.sub{color:var(--muted);font-size:14px} .safe-sheet .ssr small{color:var(--faint);margin-left:6px}
+.safe-sheet .ssr.tot{border-top:1px solid var(--line);font-weight:700;font-size:16px} .safe-sheet .ssr.tot b{color:#9FE6C8} .safe-sheet .ssr.tot b.neg{color:#F7A896}
+.safe-sheet p{margin:10px 0 0}
 </style>
 </head>
 <body>
@@ -1000,6 +1011,6 @@ body[data-view="penny"] .mhead .brand{visibility:hidden}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
 <script src="config.js?v=3" onerror="void 0"></script>
-<script src="app.js?v=51"></script>
+<script src="app.js?v=52"></script>
 </body>
 </html>

@@ -680,7 +680,7 @@ function resolveItem(it, pending = []) {                          // turn her na
     const c = d.kind === 'transfer' ? null : byName(catsOf(d.kind), d.category);
     const waits = n => pending.some(p => norm(p) === norm(n));
     const err = !a ? (waits(d.account) ? `Waits for "${d.account}" above` : `No account called "${d.account}"`) : d.kind === 'transfer' && !to ? (waits(d.to_account) ? `Waits for "${d.to_account}" above` : `No account called "${d.to_account}"`) : !(num(d.amount) > 0) ? 'Amount missing' : !/^\d{4}-\d{2}-\d{2}$/.test(d.date) ? 'Date missing' : '';
-    return { err, row: err ? null : { kind: d.kind, amount: Math.abs(num(d.amount)), date: d.date, account_id: a.id, to_account_id: to?.id || null, category_id: c?.id || null, note: d.note || null, tag: d.tag === 'daybreak' ? 'daybreak' : 'personal' } };
+    return { err, row: err ? null : { kind: d.kind, amount: Math.abs(num(d.amount)), date: d.date, account_id: a.id, to_account_id: to?.id || null, to_amount: to && to.currency !== a.currency && num(d.to_amount) > 0 ? num(d.to_amount) : null, category_id: c?.id || null, note: d.note || null, tag: d.tag === 'daybreak' ? 'daybreak' : 'personal' } };
   }
   if (it.type === 'bill') {
     const c = byName(catsOf('expense'), d.category), ex = d.update_existing ? byName(S.d.bills.filter(b => b.active), d.name) : null;
@@ -707,7 +707,8 @@ function itemLine(it) {
   if (it.type === 'tx') {
     const a = byName(activeAccounts(), d.account), cur = a?.currency || 'PHP';
     const head = { expense: 'Expense', income: 'Income', transfer: 'Transfer' }[d.kind] || 'Entry';
-    const where = d.kind === 'transfer' ? `${esc(d.account)} → ${esc(d.to_account)}` : `${esc(d.account)}${d.category ? ' · ' + esc(d.category) : ''}`;
+    const toA = d.kind === 'transfer' ? byName(activeAccounts(), d.to_account) : null;
+    const where = d.kind === 'transfer' ? `${esc(d.account)} → ${esc(d.to_account)}${num(d.to_amount) > 0 && toA && toA.currency !== cur ? ` (${money(num(d.to_amount), toA.currency)})` : ''}` :`${esc(d.account)}${d.category ? ' · ' + esc(d.category) : ''}`;
     return { ic: d.kind === 'income' ? 'arrow-down-left' : d.kind === 'transfer' ? 'arrow-left-right' : 'arrow-up-right', tone: d.kind,
       t: `${head} ${d.kind === 'income' ? '+' : d.kind === 'expense' ? '−' : ''}${money(Math.abs(num(d.amount)), cur)}`, s: `${where} · ${esc(shortDate(d.date))}${d.note ? ' · ' + esc(d.note) : ''}${d.tag === 'daybreak' ? ' · Daybreak' : ''}` };
   }
@@ -1123,6 +1124,40 @@ function groupMenu(bank) {
     ${accs.some(a => rate(a.currency) == null) ? `<div class="ash-match" style="margin-top:12px">${accs.filter(a => rate(a.currency) == null).map(a => a.currency).join(', ')} not in the total yet · <a href="#settings" data-a="close">set the rate</a></div>` : ''}`);
 }
 
+// Safe to spend: money he has, minus every bill due before his next payday (overdue ones included).
+function safeToSpend() {
+  const w = worth(), t = today();
+  const nextInc = upcomingIncome(90).find(o => !o.late && o.date > t);
+  const until = nextInc?.date || addDays(t, 14);
+  const due = [];
+  for (const bl of S.d.bills.filter(x => x.active)) {
+    if (bl.due_date < t) due.push({ bill: bl, date: bl.due_date, late: true });
+    else for (const d of occurrences(bl, t, addDays(until, -1))) due.push({ bill: bl, date: d, late: false });
+  }
+  due.sort((x, y) => x.date.localeCompare(y.date));
+  const owed = due.reduce((s, o) => s + num(o.bill.amount), 0);
+  return { have: w.own, owed, safe: w.own - owed, until, payer: nextInc?.inc?.name || null, due };
+}
+function safeRow() {
+  const s = safeToSpend();
+  return `<button class="safe ${s.safe < 0 ? 'neg' : ''}" data-a="safeInfo"><span class="sl">Safe to spend until ${esc(shortDate(s.until))}</span><b>${money(s.safe)}</b>${IC('chevron-right', 'sm')}</button>`;
+}
+// Payday: a paycheck from one of his income sources landed in the last 3 days and has no plan yet.
+function freshPay() {
+  const done = S.settings.planDone || {}, since = addDays(today(), -3);
+  for (const t of S.d.transactions.filter(t => t.kind === 'income' && t.date >= since && !done[t.id]).sort((x, y) => y.date.localeCompare(x.date))) {
+    const src = incomes().find(i => norm(i.name) === norm(t.note) || payerName(t.note) === i.name || norm(t.note).includes(norm(i.name).split(' ')[0]));
+    if (src) return { t, src };
+  }
+  return null;
+}
+function paydayCard() {
+  const p = freshPay(); if (!p) return '';
+  const a = acc(p.t.account_id);
+  return `<section class="card payday c12" style="--o:2"><span class="pd-ic">${IC('party-popper')}</span><div class="main"><b>${esc(p.src.name)} pay landed: ${money(num(p.t.amount), a?.currency || 'PHP')}</b><small>Into ${esc(a?.name || '?')} on ${esc(shortDate(p.t.date))}. Penny can plan where it goes before your next payday.</small></div>
+    <button class="btn pri" data-a="paydayPlan" data-id="${p.t.id}">${IC('sparkles', 'sm')} Plan my payday</button><button class="rbtn" data-a="paydaySkip" data-id="${p.t.id}" aria-label="Not now">${IC('x', 'sm')}</button></section>`;
+}
+
 function vHome() {
   const w = worth(), mt = monthTotals(thisMonth()), up = upcoming(45), b = balances();
   const nm = String(S.user?.user_metadata?.own_names || '').split(',')[0].trim().split(' ')[0] || 'Blu';
@@ -1148,6 +1183,7 @@ function vHome() {
         <button class="eye" data-a="toggleHide" aria-label="${hidden ? 'Show amounts' : 'Hide amounts'}" aria-pressed="${hidden}">${IC(hidden ? 'eye-off' : 'eye', 'sm')}</button></div>
       <div class="v">${whole}<small>${cents}</small></div>
       <div class="bmeta">${w.owe < 0 ? `<span class="owe">${IC('trending-down', 'sm')} You owe ${money(-w.owe)}</span>` : `<span class="ok">${IC('shield-check', 'sm')} Nothing owed</span>`}${w.owed > 0 ? `<span class="dot">·</span><span class="owed">Owed to you ${money(w.owed)}</span>` : ''}${w.owe < 0 || w.owed > 0 ? `<span class="dot">·</span><span>Net worth ${money(w.net)}</span>` : ''}${w.missing.length ? `<span class="dot">·</span><span>Excludes ${w.missing.join(', ')}</span><span class="dot">·</span><a href="#settings">set rate</a>` : ''}</div>
+      ${safeRow()}
       <div class="bscope">${tagChips()}</div>
       <div class="hq only-desk"><button class="btn pri" data-a="addTx">${IC('plus', 'sm')} Add</button><button class="btn" data-a="scan">${IC('scan-line', 'sm')} Scan</button><button class="btn" data-a="addTransfer">${IC('arrow-left-right', 'sm')} Transfer</button><a class="btn" href="#bills">${IC('receipt', 'sm')} Pay bill</a></div>
     </section>
@@ -1170,6 +1206,7 @@ function vHome() {
     </div>
     <div class="c12 only-desk"><div class="sechead"><b class="cap">Wallet</b><a href="#accounts">See all</a></div>
       <div class="cardgrid" style="grid-template-columns:repeat(${cardCols(homeItems.length)},minmax(0,1fr))">${homeItems.slice().reverse().map(it => walletCard(it, b)).join('')}</div></div>
+    ${paydayCard()}
     ${unpaid.count && ious.count ? `<div class="c6" style="--o:4">${unpaid.card}</div><div class="c6" style="--o:4"><section class="card iou-card"><div class="sh"><b class="cap">IOUs</b><span class="grow"></span><span class="xs faint">People</span></div>${ious.html}</section></div>`
       : unpaid.count ? `<div class="c12" style="--o:4">${unpaid.card}</div>`
       : ious.count ? `<section class="card iou-card c12" style="--o:4"><div class="sh"><b class="cap">IOUs</b><span class="grow"></span><span class="xs faint">People</span></div>${ious.html}</section>` : ''}
@@ -1724,6 +1761,22 @@ const segVal = name => $(`[data-seg="${name}"] .on`)?.dataset.v;
 const amt = v => num(String(v ?? '').replace(/,/g, ''));
 const A = {
   pennyAsk: el => { if (location.hash !== '#penny') location.hash = 'penny'; pennySend(el.dataset.q); },
+  safeInfo: () => {
+    const s = safeToSpend();
+    modal('Safe to spend', `<div class="safe-sheet">
+      <div class="ssr"><span>Money you have now</span><b>${money(s.have)}</b></div>
+      ${s.due.length ? s.due.map(o => `<div class="ssr sub"><span>${esc(o.bill.name)} <small>${o.late ? 'overdue' : 'due ' + esc(shortDate(o.date))}</small></span><b>−${money(num(o.bill.amount))}</b></div>`).join('') : '<div class="ssr sub"><span>No bills due before then</span><b>₱0.00</b></div>'}
+      <div class="ssr tot"><span>Safe to spend until ${esc(shortDate(s.until))}</span><b class="${s.safe < 0 ? 'neg' : ''}">${money(s.safe)}</b></div>
+      <p class="xs faint">${s.payer ? `Your next payday is ${esc(s.payer)} on ${esc(shortDate(s.until))}.` : 'No payday set up, so this looks 2 weeks ahead.'} Every bill due before then is set aside, overdue ones too. Dollars in Wise count at today's rate.</p></div>`,
+      `<button class="btn pri" data-a="close">Got it</button>`);
+  },
+  paydayPlan: el => {
+    const t = S.d.transactions.find(x => x.id === el.dataset.id), p = freshPay(); if (!t || !p) return;
+    S.settings.planDone = { ...(S.settings.planDone || {}), [t.id]: 1 }; saveSettings();
+    const a = acc(t.account_id), s = safeToSpend();
+    A.pennyAsk({ dataset: { q: `Payday plan: my ${p.src.name} pay of ${money(num(t.amount), a?.currency || 'PHP')} landed in ${a?.name || 'my account'} on ${t.date}. My next payday is ${s.until}. Plan where this money goes until then and prepare the moves for me to approve.` } });
+  },
+  paydaySkip: el => { S.settings.planDone = { ...(S.settings.planDone || {}), [el.dataset.id]: 1 }; saveSettings(); render(); },
   pennySend: () => pennySend($('#pennyIn')?.value),
   pennyScan: () => pennyScan(),
   pennySave: el => { const m = S.penny[Number(el.dataset.i)]; if (!m?.scan) return; scanResult = m.scan; m.saved = true; savePenny(); showScan(m.scan); },
