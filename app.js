@@ -782,6 +782,8 @@ async function pennySend(q, image) {
       msg ||= 'Penny couldn\'t answer right now. Try again in a moment.';
     }
     const scan = await scanP;
+    // Penny fetched the latest market rate: Scry keeps it too.
+    if (!isErr && data?.rates?.rates?.USD > 0) { Object.assign(S.settings, { rates: data.rates.rates, ratesDate: data.rates.date, ratesAt: Date.now() }); saveSettings(); }
     const items = isErr ? [] : (data?.proposals || []).flatMap(p => p.tool === 'propose_transactions' ? (p.input?.entries || []).map(e => ({ type: 'tx', d: e, st: 'new' }))
       : p.tool === 'propose_bill' ? [{ type: 'bill', d: p.input, st: 'new' }] : p.tool === 'propose_account' ? [{ type: 'acct', d: p.input, st: 'new' }]
       : p.tool === 'propose_category' ? [{ type: 'cat', d: p.input, st: 'new' }] : p.tool === 'propose_income' ? [{ type: 'income', d: p.input, st: 'new' }] : []);
