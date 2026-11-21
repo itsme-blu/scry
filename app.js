@@ -489,7 +489,9 @@ const sameTransfer = (fromId, toId, amount, date) => S.d.transactions.find(t => 
 function inboxCheck(it) {
   if (sourceOf(it) !== 'bank') {
     const p = parseNotif(it), date = iso(new Date(it.received_at));
-    const bill = p.party ? S.d.bills.find(b => b.active && (norm(b.name).includes(norm(p.party)) || norm(p.party).includes(norm(b.name)))) : null;
+    // A monthly bill (Meralco, BP Water) is updated, never a one-off like "Meralco arrears".
+    const same = b => b.active && (norm(b.name).includes(norm(p.party)) || norm(p.party).includes(norm(b.name)) || norm(b.name).split(' ')[0] === norm(p.party).split(' ')[0] && norm(p.party).split(' ')[0].length > 2);
+    const bill = p.party ? (S.d.bills.find(b => same(b) && b.repeat !== 'none') || (p.kind === 'billpaid' ? S.d.bills.find(same) : null)) : null;
     const near = S.d.transactions.filter(t => t.kind === 'expense' && Math.abs(daysBetween(t.date, date)) <= 3);
     const dup = p.kind === 'billpaid' && p.amount != null ? (near.find(t => Math.abs(num(t.amount) - p.amount) < 0.005)
       || near.find(t => t.bill_id && near.some(f => f !== t && f.note === `${t.note} fee` && Math.abs(num(t.amount) + num(f.amount) - p.amount) < 0.005))
