@@ -900,6 +900,17 @@ a,button,[role="button"]{-webkit-touch-callout:none;outline:none}
 .tabbar a:active,.qcats button:active,.addgrid button:active,.addgrid a:active,.atx:active,.subrow:active,.rowlink:active,.ash-btn:active,.ash-add:active,.btn:active,.rbtn:active,.eye:active,.rv-strip:active{transform:scale(.96);opacity:.85}
 .tab-add:active{transform:translateY(-24px) scale(.93)!important}
 .tabbar a:active .lc{transform:scale(.9)}
+/* v28: balance card footer, one left edge */
+.balance.lux .bmeta{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:10px;font-size:13px;color:#9C9483}
+.balance.lux .bmeta .lc{width:15px;height:15px;vertical-align:-3px;margin-right:2px}
+.balance.lux .bmeta .ok{color:#E6CD96;font-weight:600}
+.balance.lux .bmeta .owe{color:#FFB4A8;font-weight:600}
+.balance.lux .bmeta .dot{color:#5E584C}
+.balance.lux .bmeta a{color:#D9BF86}
+.balance.lux .bscope{margin-top:18px}
+.balance.lux .bscope .chips{display:grid;grid-template-columns:repeat(3,1fr);width:100%;padding:4px;border-radius:14px;gap:4px}
+.balance.lux .bscope .chips button{width:100%;padding:9px 0;border-radius:10px;font-size:14px;font-weight:600;text-align:center}
+.balance.lux .hq{padding-top:18px}
 </style>
 </head>
 <body>
@@ -908,6 +919,6 @@ a,button,[role="button"]{-webkit-touch-callout:none;outline:none}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
 <script src="config.js?v=3" onerror="void 0"></script>
-<script src="app.js?v=27"></script>
+<script src="app.js?v=28"></script>
 </body>
 </html>

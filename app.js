@@ -869,8 +869,8 @@ function vHome() {
       <div class="bh"><span class="cap k">Total balance</span><span class="grow"></span>
         <button class="eye" data-a="toggleHide" aria-label="${hidden ? 'Show amounts' : 'Hide amounts'}" aria-pressed="${hidden}">${IC(hidden ? 'eye-off' : 'eye', 'sm')}</button></div>
       <div class="v ${w.net < 0 ? 'neg' : ''}">${whole}<small>${cents}</small></div>
-      <div class="bfoot">${w.owe < 0 ? `<span class="chip owe">${IC('trending-down', 'sm')} You owe ${money(-w.owe)}</span>` : `<span class="chip">${IC('shield-check', 'sm')} Nothing owed</span>`}${tagChips()}</div>
-      ${w.missing.length ? `<div class="fine">Excludes ${w.missing.join(', ')} · <a href="#settings">set rate</a></div>` : ''}
+      <div class="bmeta">${w.owe < 0 ? `<span class="owe">${IC('trending-down', 'sm')} You owe ${money(-w.owe)}</span>` : `<span class="ok">${IC('shield-check', 'sm')} Nothing owed</span>`}${w.missing.length ? `<span class="dot">·</span><span>Excludes ${w.missing.join(', ')}</span><span class="dot">·</span><a href="#settings">set rate</a>` : ''}</div>
+      <div class="bscope">${tagChips()}</div>
       <div class="hq only-desk"><button class="btn pri" data-a="addTx">${IC('plus', 'sm')} Add</button><button class="btn" data-a="scan">${IC('scan-line', 'sm')} Scan</button><button class="btn" data-a="addTransfer">${IC('arrow-left-right', 'sm')} Transfer</button><a class="btn" href="#bills">${IC('receipt', 'sm')} Pay bill</a></div>
     </section>
     <section class="card summ2 c5" style="--o:5">
