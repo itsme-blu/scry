@@ -773,7 +773,7 @@ async function pennySend(q, image) {
     const history = S.penny.filter(m => !m.error).map(({ role, content, photo, items }) => ({ role, content: (photo ? `[Blu showed you a photo here] ${content}` : content)
       + (items?.length ? `\n\n[Entries you prepared: ${items.map(x => `${x.type === 'tx' ? `${x.d.kind} ${x.d.amount} ${x.d.account}${x.d.to_account ? '→' + x.d.to_account : ''} ${x.d.date}` : x.d.name} = ${x.st === 'ok' ? 'APPROVED and saved' : x.st === 'skip' ? 'skipped by Blu' : x.st === 'fail' ? 'failed to save' : 'still waiting'}`).join('; ')}]` : '') }));
     const { data, error } = await S.sb.functions.invoke('penny', {
-      body: { messages: history, image: image || undefined, today: today(), rates: S.settings.rates },
+      body: { messages: history, image: image || undefined, today: today(), rates: S.settings.rates, ratesDate: S.settings.ratesDate || null },
     });
     let msg = data?.reply, isErr = false;
     if (error) {
@@ -1343,8 +1343,8 @@ function vSettings() {
       <div id="simOut" class="small" style="margin-top:10px" aria-live="polite"></div></section>
 
     <section class="card"><h2>Exchange rates <small>pesos per 1 unit</small></h2>
-      <div class="grid g2" style="gap:8px 16px">${['USD', 'SGD', 'EUR', 'GBP', 'AUD', 'CAD'].map(c => `<label class="f" style="flex-direction:row;align-items:center;gap:10px"><span style="width:40px">${c}</span><input inputmode="decimal" value="${S.settings.rates[c] ?? ''}" placeholder="not set" data-c="rate" data-cur="${c}" style="width:100%"></label>`).join('')}</div>
-      <p class="xs faint" style="margin:10px 0 0">USD starts at ₱62, the rate the Daybreak map uses. Update it to today's rate.</p></section>
+      <div class="grid g2" style="gap:8px 16px">${['USD', 'CAD', 'SGD', 'EUR', 'GBP', 'AUD'].map(c => `<div class="row" style="gap:10px;justify-content:space-between"><span class="muted">${c}</span><b>${S.settings.rates[c] ? '₱' + num(S.settings.rates[c]).toFixed(2) : '–'}</b></div>`).join('')}</div>
+      <p class="xs faint" style="margin:10px 0 0">${S.settings.ratesDate ? `Market rate of ${shortDate(S.settings.ratesDate)}, updated by itself every day.` : 'Updates by itself from the daily market rate.'} Wise converts at about this rate, minus its small fee.</p></section>
 
     <section class="card"><h2>Categories <small><a href="#" data-a="addCat">+ Add</a></small></h2>
       ${['expense', 'income'].map(k => `<div class="lbl" style="margin:4px 0 8px">${k === 'expense' ? 'Spending' : 'Income'}</div><div class="catpick" style="margin-bottom:12px">${catsOf(k).map(c => `<button data-a="editCat" data-id="${c.id}">${catIcon(c)} ${esc(c.name)}</button>`).join('')}</div>`).join('')}</section>
@@ -2123,7 +2123,20 @@ async function resync() {
   lastSync = Date.now();
   try { for (const t of TABLES) S.d[t] = await fetchAll(t); render(); } catch { /* offline: keep what's on screen */ }
 }
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { checkForUpdate(); setTimeout(checkPaying, 400); resync(); } });
+// Exchange rates: the daily market rate (European Central Bank, via Frankfurter), at most every 6 hours.
+async function refreshRates() {
+  if (Date.now() - (S.settings.ratesAt || 0) < 6 * 3600e3) return;
+  try {
+    const r = await fetch('https://api.frankfurter.dev/v1/latest?base=USD&symbols=PHP,CAD,SGD,EUR,GBP,AUD').then(x => x.json());
+    const php = num(r?.rates?.PHP); if (!(php > 0)) return;
+    const rates = { USD: Math.round(php * 10000) / 10000 };
+    for (const c of ['CAD', 'SGD', 'EUR', 'GBP', 'AUD']) if (num(r.rates[c]) > 0) rates[c] = Math.round(php / num(r.rates[c]) * 10000) / 10000;
+    Object.assign(S.settings, { rates, ratesDate: r.date, ratesAt: Date.now() }); saveSettings();
+    if (S.mode) render();
+  } catch { /* offline: keep the last rate */ }
+}
+refreshRates();
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { checkForUpdate(); setTimeout(checkPaying, 400); resync(); refreshRates(); } });
 window.addEventListener('focus', resync);
 checkForUpdate();
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => { /* still works without it */ });
