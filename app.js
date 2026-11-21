@@ -687,6 +687,18 @@ function resolveItem(it, pending = []) {                          // turn her na
     const err = d.update_existing && !ex ? `No bill called "${d.name}" to update` : !/^\d{4}-\d{2}-\d{2}$/.test(d.due_date) ? 'Due date missing' : '';
     return { err, ex, row: err ? null : { name: d.name, amount: num(d.amount), due_date: d.due_date, repeat: d.repeat || 'monthly', category_id: c?.id || ex?.category_id || null, note: d.note || ex?.note || null, tag: ex?.tag || 'personal', active: true, autopay: ex?.autopay || false } };
   }
+  if (it.type === 'cat') {
+    const kind = d.kind === 'income' ? 'income' : 'expense', ex = catsOf(kind).find(c => norm(c.name) === norm(d.name));
+    return { err: ex ? `You already have "${ex.name}"` : !String(d.name || '').trim() ? 'Name missing' : '', row: { kind, name: String(d.name).trim(), icon: d.icon || null, sort: S.d.categories.length + 1 } };
+  }
+  if (it.type === 'income') {
+    const a = byName(accs, d.account), ex = d.update_existing ? incomes().find(x => norm(x.name) === norm(d.name)) || byName(incomes(), d.name) : null;
+    const hourly = num(d.hourly_rate), hours = num(d.hours_per_payday);
+    const err = !a ? (pending.some(p => norm(p) === norm(d.account)) ? `Waits for "${d.account}" above` : `No account called "${d.account}"`)
+      : d.update_existing && !ex ? `No payday called "${d.name}" to update` : !/^\d{4}-\d{2}-\d{2}$/.test(d.next_payday) ? 'Next payday missing' : '';
+    return { err, ex, row: err ? null : { id: ex?.id || Math.random().toString(36).slice(2, 10), name: ex?.name || String(d.name).trim(), pay_cur: (d.pay_currency || a.currency || 'PHP').toUpperCase().slice(0, 3),
+      hourly, hours, amount: hourly && hours ? Math.round(hourly * hours * 100) / 100 : num(d.fixed_amount), account_id: a.id, every: d.every || 'biweekly', next: d.next_payday, tag: ex?.tag || 'personal' } };
+  }
   const dup = byName(accs, d.name);
   return { err: dup && norm(dup.name) === norm(d.name) ? `You already have "${dup.name}"` : '', row: { name: d.name, type: d.type, currency: (d.currency || 'PHP').toUpperCase().slice(0, 3), opening_balance: num(d.opening_balance), sort: S.d.accounts.length + 1 } };
 }
@@ -700,6 +712,10 @@ function itemLine(it) {
       t: `${head} ${d.kind === 'income' ? '+' : d.kind === 'expense' ? '−' : ''}${money(Math.abs(num(d.amount)), cur)}`, s: `${where} · ${esc(shortDate(d.date))}${d.note ? ' · ' + esc(d.note) : ''}${d.tag === 'daybreak' ? ' · Daybreak' : ''}` };
   }
   if (it.type === 'bill') return { ic: 'receipt', tone: 'bill', t: `${d.update_existing ? 'Update bill' : 'New bill'} · ${esc(d.name)} ${money(num(d.amount))}`, s: `${esc(d.repeat === 'none' ? 'One-off' : d.repeat)} · due ${esc(d.due_date ? shortDate(d.due_date) : '?')}${d.note ? ' · ' + esc(d.note) : ''}` };
+  if (it.type === 'cat') return { ic: 'tag', tone: 'bill', t: `New category · ${esc(d.icon || '')} ${esc(d.name)}`, s: d.kind === 'income' ? 'Income' : 'Spending' };
+  if (it.type === 'income') { const pc = (d.pay_currency || 'PHP').toUpperCase();
+    return { ic: 'calendar-clock', tone: 'income', t: `${d.update_existing ? 'Update payday' : 'New payday'} · ${esc(d.name)}`,
+      s: `${num(d.hourly_rate) ? `${money(num(d.hourly_rate), pc)}/hr${num(d.hours_per_payday) ? ` × ${num(d.hours_per_payday)} hrs` : ' · hours vary'}` : num(d.fixed_amount) ? money(num(d.fixed_amount), pc) : 'amount varies'} · ${esc(INCOME_REPEAT[d.every] || d.every)} · into ${esc(d.account)} · next ${esc(d.next_payday ? shortDate(d.next_payday) : '?')}` }; }
   return { ic: d.type === 'loan' || num(d.opening_balance) < 0 ? 'landmark' : 'wallet', tone: 'acct', t: `New account · ${esc(d.name)}`, s: `${esc(ACCOUNT_TYPES[d.type]?.[0] || d.type)} · starts at ${money(num(d.opening_balance), (d.currency || 'PHP').toUpperCase())}${d.note ? ' · ' + esc(d.note) : ''}` };
 }
 function pennyItems(m, i) {
@@ -718,12 +734,14 @@ async function pbApprove(i, j) {
   try {
     if (it.type === 'tx') await DB.insert('transactions', row);
     else if (it.type === 'bill') ex ? await DB.update('bills', ex.id, row) : await DB.insert('bills', row);
+    else if (it.type === 'cat') await DB.insert('categories', row);
+    else if (it.type === 'income') await saveIncomes(incomes().filter(x => x.id !== row.id).concat(row));
     else await DB.insert('accounts', row);
     it.st = 'ok';
   } catch (e) { it.st = 'fail'; it.msg = e.message || 'Could not save'; }
 }
 async function pbApproveAll(i) {
-  const items = S.penny[i]?.items || [], order = { acct: 0, bill: 1, tx: 2 };   // accounts first, so entries can point at them
+  const items = S.penny[i]?.items || [], order = { acct: 0, cat: 0, income: 1, bill: 1, tx: 2 };   // accounts and categories first, so entries can point at them
   for (const j of items.map((x, j) => j).sort((a, b) => order[items[a].type] - order[items[b].type])) await pbApprove(i, j);
   savePenny(); render(); toast(`${items.filter(x => x.st === 'ok').length} saved to your books`);
 }
@@ -765,7 +783,8 @@ async function pennySend(q, image) {
     }
     const scan = await scanP;
     const items = isErr ? [] : (data?.proposals || []).flatMap(p => p.tool === 'propose_transactions' ? (p.input?.entries || []).map(e => ({ type: 'tx', d: e, st: 'new' }))
-      : p.tool === 'propose_bill' ? [{ type: 'bill', d: p.input, st: 'new' }] : p.tool === 'propose_account' ? [{ type: 'acct', d: p.input, st: 'new' }] : []);
+      : p.tool === 'propose_bill' ? [{ type: 'bill', d: p.input, st: 'new' }] : p.tool === 'propose_account' ? [{ type: 'acct', d: p.input, st: 'new' }]
+      : p.tool === 'propose_category' ? [{ type: 'cat', d: p.input, st: 'new' }] : p.tool === 'propose_income' ? [{ type: 'income', d: p.input, st: 'new' }] : []);
     S.penny.push({ role: 'assistant', content: msg || 'No answer came back.', error: isErr, scan: !isErr && scan && !scan.error ? scan : undefined, items: items.length ? items : undefined });
   } catch (e) {
     S.penny.push({ role: 'assistant', content: 'Penny couldn\'t be reached. Check your internet and try again.', error: true });
