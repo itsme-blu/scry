@@ -855,6 +855,42 @@ details.orig div{margin-top:8px;padding:10px 12px;border-radius:14px;background:
 /* v25: open the bank's own app */
 .ash-open{display:inline-flex;align-items:center;gap:8px;margin-top:14px;padding:10px 16px;border-radius:999px;background:rgba(255,255,255,.95);color:#111;font:700 14px var(--body);text-decoration:none;box-shadow:0 6px 16px rgba(0,0,0,.25)}
 .ash-open:active{transform:scale(.97)}
+/* v26: Receive QR + a richer Summary */
+.ash-qr{margin:18px 0 0;padding:16px;border-radius:22px;background:var(--soft)}
+.qr-body{display:flex;gap:14px;align-items:center;min-height:60px}
+.qr-thumb{all:unset;cursor:pointer;flex:none;width:96px;height:96px;border-radius:16px;background:#fff;padding:6px;box-sizing:border-box;box-shadow:0 6px 16px rgba(0,0,0,.25)}
+.qr-thumb img{width:100%;height:100%;object-fit:contain;image-rendering:pixelated}
+.qr-side b{display:block;font-size:15px}.qr-side small{display:block;color:var(--mut);font-size:12px;margin:2px 0 10px}
+.qr-acts{display:flex;gap:6px}
+.qr-mini{display:inline-flex;align-items:center;gap:5px;height:32px;padding:0 12px;border-radius:999px;border:0;background:var(--soft2);color:var(--ink2);font:600 12px var(--body);cursor:pointer}
+.qr-empty{width:100%;text-align:center;padding:6px 0}
+.qr-empty b{display:block;font-size:15px}.qr-empty small{display:block;color:var(--mut);font-size:12px;margin:4px 0 12px}
+.qr-add{display:inline-flex;align-items:center;justify-content:center;gap:6px;width:100%;height:46px;border-radius:999px;border:0;background:rgba(0,0,0,.25);color:#fff;font:700 14px var(--body);cursor:pointer}
+.qr-full{position:fixed;inset:0;z-index:80;background:rgba(4,6,14,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:24px;backdrop-filter:blur(8px)}
+.qr-card{background:#fff;color:#111;border-radius:28px;padding:22px 22px 18px;width:min(88vw,420px);text-align:center;box-shadow:0 30px 60px rgba(0,0,0,.5)}
+.qr-card img{width:100%;aspect-ratio:1;object-fit:contain;image-rendering:pixelated}
+.qr-title{font:800 20px var(--display);margin-bottom:10px}.qr-hint{font-size:13px;color:#555;margin-top:8px}
+.qr-close{color:rgba(255,255,255,.6);font-size:13px}
+/* Summary */
+.summ2{display:flex;flex-direction:column;gap:14px}
+.summ2 .pill{background:rgba(246,220,160,.1);color:#EBD3A0;border:1px solid rgba(246,220,160,.25)}
+.s2-net .cap{font-size:11px;color:var(--muted)}
+.s2-net .v{font:800 34px/1.1 var(--display);letter-spacing:-.025em;margin-top:4px;font-variant-numeric:tabular-nums;
+  background:linear-gradient(180deg,#FFF3D6,#E3BE76);-webkit-background-clip:text;background-clip:text;color:transparent}
+.s2-net .v.neg{background:linear-gradient(180deg,#FFD1C9,#F08A7E);-webkit-background-clip:text;background-clip:text}
+.s2-bar{display:flex;gap:4px;height:8px;border-radius:999px;overflow:hidden}
+.s2-bar i{border-radius:999px;min-width:6px}
+.s2-bar .in{background:linear-gradient(90deg,#1F9E73,#43D3A2)} .s2-bar .out{background:linear-gradient(90deg,#E07A63,#B8475A)}
+.s2-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.s2{position:relative;display:flex;flex-direction:column;gap:2px;padding:14px;border-radius:18px;text-decoration:none;color:var(--ink);border:1px solid var(--line);overflow:hidden}
+.s2::before{content:"";position:absolute;left:0;right:0;top:0;height:2px}
+.s2.in{background:linear-gradient(160deg,rgba(31,158,115,.22),rgba(31,158,115,.04) 70%),rgba(255,255,255,.02)} .s2.in::before{background:linear-gradient(90deg,#43D3A2,transparent)}
+.s2.out{background:linear-gradient(160deg,rgba(224,122,99,.2),rgba(224,122,99,.04) 70%),rgba(255,255,255,.02)} .s2.out::before{background:linear-gradient(90deg,#F0907B,transparent)}
+.s2 .ic{width:30px;height:30px;border-radius:999px;display:grid;place-items:center;margin-bottom:10px}
+.s2.in .ic{background:rgba(67,211,162,.16);color:#6FE3BC} .s2.out .ic{background:rgba(240,144,123,.16);color:#F7A896}
+.s2 .k{font:700 11px var(--body);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.s2 b{font:800 20px var(--display);letter-spacing:-.02em;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.s2 small{font-size:12px;color:var(--faint)}
 </style>
 </head>
 <body>
@@ -863,6 +899,6 @@ details.orig div{margin-top:8px;padding:10px 12px;border-radius:14px;background:
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
 <script src="config.js?v=3" onerror="void 0"></script>
-<script src="app.js?v=25"></script>
+<script src="app.js?v=26"></script>
 </body>
 </html>

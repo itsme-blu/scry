@@ -770,12 +770,72 @@ function acctMenu(id, all = false) {
       <button class="ash-btn" data-a="editAccount" data-id="${a.id}" aria-label="Edit account">${IC('pencil')}</button></div>
     <div class="ash-head"><h2>${esc(a.name)}</h2><div class="cap">${esc(ACCOUNT_TYPES[a.type]?.[0] || a.type)} · ${esc(a.currency)}</div></div>
     <div class="ash-bal"><div class="cap">Current balance</div><div class="v ${bal < 0 ? 'neg' : ''}">${money(bal, a.currency)}</div><div class="ash-match">${matchedLabel(a.id)}</div>${openAppBtn(a.bank)}</div>
+    ${a.type !== 'cash' ? `<section class="ash-qr" id="qrBox" data-id="${a.id}"><div class="ash-ch"><b class="cap">Receive money</b></div><div class="qr-body"><span class="spin sm"></span></div></section>` : ''}
     <section class="ash-card"><div class="ash-ch"><b class="cap">Transactions</b><span class="grow"></span><span class="xs">${txs.length}</span></div>
       ${shown.length ? shown.map(t => acctTxRow(t, a)).join('') : '<div class="ash-empty">Nothing here yet.</div>'}
       ${!all && txs.length > 6 ? `<button class="ash-more" data-a="sheetAll" data-id="${a.id}">See all ${txs.length} ${IC('chevron-down', 'sm')}</button>` : ''}</section>`,
     `<button class="ash-add out" data-a="sheetAdd" data-k="expense" data-id="${a.id}">${IC('plus', 'sm')} Expense</button>
      <button class="ash-add tr" data-a="sheetAdd" data-k="transfer" data-id="${a.id}">${IC('arrow-left-right', 'sm')} Transfer</button>
      <button class="ash-add in" data-a="sheetAdd" data-k="income" data-id="${a.id}">${IC('plus', 'sm')} Income</button>`);
+  if (a.type !== 'cash') loadQR(a.id);
+}
+// Receive QR: kept privately in Blu's Supabase (function "qr"), cached in this browser for speed.
+const qrCache = {};
+const qrLocal = id => { try { return localStorage.getItem('scry-qr-' + id); } catch { return null; } };
+async function loadQR(id) {
+  if (isDemo()) return paintQR(id, null);
+  if (qrCache[id] !== undefined) return paintQR(id, qrCache[id]);
+  const cached = qrLocal(id); if (cached) paintQR(id, cached);
+  try {
+    const { data } = await S.sb.functions.invoke('qr', { body: { action: 'get', account_id: id } });
+    qrCache[id] = data?.image || null;
+    try { qrCache[id] ? localStorage.setItem('scry-qr-' + id, qrCache[id]) : localStorage.removeItem('scry-qr-' + id); } catch { /* cache only */ }
+  } catch { qrCache[id] = cached || null; }
+  paintQR(id, qrCache[id]);
+}
+function paintQR(id, b64) {
+  const box = $('#qrBox'); if (!box || box.dataset.id !== id) return;
+  box.querySelector('.qr-body').innerHTML = b64
+    ? `<button class="qr-thumb" data-a="qrShow" data-id="${id}" aria-label="Show this QR full screen"><img src="data:image/png;base64,${b64}" alt="Receive QR"></button>
+       <div class="qr-side"><b>Ready to scan</b><small>Tap the code to show it full screen.</small>
+       <div class="qr-acts"><button class="qr-mini" data-a="qrPick" data-id="${id}">${IC('refresh-cw', 'sm')} Replace</button><button class="qr-mini" data-a="qrDel" data-id="${id}">${IC('trash-2', 'sm')} Remove</button></div></div>`
+    : isDemo() ? '<div class="qr-empty">Receive QR works once you\'re signed in.</div>'
+    : `<div class="qr-empty"><b>No receive QR added yet.</b><small>Save the code from your bank app to show when someone pays you.</small>
+       <button class="qr-add" data-a="qrPick" data-id="${id}">${IC('plus', 'sm')} Add receive QR</button></div>`;
+  drawIcons();
+}
+async function qrToPng(file) {                   // keep it crisp: PNG, longest side at most 900px
+  const bmp = await createImageBitmap(file), k = Math.min(1, 900 / Math.max(bmp.width, bmp.height));
+  const c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+  const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(bmp, 0, 0, c.width, c.height);
+  return c.toDataURL('image/png').split(',')[1];
+}
+function qrPick(id) {
+  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
+  inp.onchange = async () => {
+    const f = inp.files[0]; if (!f) return;
+    const box = $('#qrBox'); if (box) box.querySelector('.qr-body').innerHTML = '<span class="spin sm"></span> Saving…';
+    try {
+      const image = await qrToPng(f);
+      const { data, error } = await S.sb.functions.invoke('qr', { body: { action: 'put', account_id: id, image } });
+      if (error || !data?.ok) { let m; try { m = (await error?.context?.json?.())?.error; } catch { /* none */ } throw new Error(m || 'Could not save it'); }
+      qrCache[id] = image; try { localStorage.setItem('scry-qr-' + id, image); } catch { /* cache only */ }
+      paintQR(id, image); toast('Receive QR saved');
+    } catch (e) { toast(e.message || 'Could not save it'); paintQR(id, qrCache[id] || null); }
+  };
+  inp.click();
+}
+async function qrDel(id) {
+  if (!confirm('Remove this receive QR?')) return;
+  try { await S.sb.functions.invoke('qr', { body: { action: 'del', account_id: id } }); } catch { /* try anyway */ }
+  qrCache[id] = null; try { localStorage.removeItem('scry-qr-' + id); } catch { /* cache only */ }
+  paintQR(id, null); toast('Removed');
+}
+function qrShow(id) {
+  const a = acc(id), b64 = qrCache[id] || qrLocal(id); if (!b64) return;
+  const back = document.createElement('div'); back.className = 'qr-full'; back.dataset.a = 'qrClose';
+  back.innerHTML = `<div class="qr-card"><div class="qr-title">${esc(a.name)}</div><img src="data:image/png;base64,${b64}" alt="Receive QR for ${esc(a.name)}"><div class="qr-hint">Scan to send money to Blu</div></div><div class="qr-close">Tap anywhere to close</div>`;
+  document.body.appendChild(back);
 }
 function groupMenu(bank) {
   const b = balances(), accs = activeAccounts().filter(a => a.bank === bank), g = groupTotal(accs, b);
@@ -813,11 +873,14 @@ function vHome() {
       ${w.missing.length ? `<div class="fine">Excludes ${w.missing.join(', ')} · <a href="#settings">set rate</a></div>` : ''}
       <div class="hq only-desk"><button class="btn pri" data-a="addTx">${IC('plus', 'sm')} Add</button><button class="btn" data-a="scan">${IC('scan-line', 'sm')} Scan</button><button class="btn" data-a="addTransfer">${IC('arrow-left-right', 'sm')} Transfer</button><a class="btn" href="#bills">${IC('receipt', 'sm')} Pay bill</a></div>
     </section>
-    <section class="card summ c5" style="--o:5">
-      <div class="sh"><b class="cap">Summary</b><span class="pill">This month</span><span class="grow"></span><a href="#tx" class="xs">Activity</a></div>
-      <div class="sblk inc" style="flex:${Math.max(pIn, 30)}"><span class="ic">${IC('arrow-down-left')}</span>${tot ? `<span class="pct">${pIn}%</span>` : ''}<div class="k cap">Income</div><div class="v">${money(mt.inc)}</div><div class="n">${plural(nIn, 'transaction')}</div></div>
-      <div class="sblk exp" style="flex:${Math.max(pOut, 30)}"><span class="ic">${IC('arrow-up-right')}</span>${tot ? `<span class="pct">${pOut}%</span>` : ''}<div class="k cap">Expenses</div><div class="v">${money(mt.out)}</div><div class="n">${plural(nOut, 'transaction')}</div></div>
-      <div class="net"><div><div class="k cap">Net cash flow</div><div class="v ${mt.left < 0 ? 'neg' : 'pos'}">${money(mt.left)}</div></div></div>
+    <section class="card summ2 c5" style="--o:5">
+      <div class="sh"><b class="cap">Summary</b><span class="grow"></span><span class="pill">${monthName(thisMonth()).split(' ')[0]}</span></div>
+      <div class="s2-net"><div class="cap">Net cash flow</div><div class="v ${mt.left < 0 ? 'neg' : ''}">${mt.left > 0 ? '+' : ''}${money(mt.left)}</div></div>
+      <div class="s2-bar" aria-hidden="true"><i class="in" style="flex:${tot ? mt.inc : 1}"></i><i class="out" style="flex:${tot ? mt.out : 1}"></i></div>
+      <div class="s2-row">
+        <a class="s2 in" href="#tx"><span class="ic">${IC('arrow-down-left', 'sm')}</span><span class="k">Income</span><b>${money(mt.inc)}</b><small>${plural(nIn, 'transaction')}${tot ? ` · ${pIn}%` : ''}</small></a>
+        <a class="s2 out" href="#tx"><span class="ic">${IC('arrow-up-right', 'sm')}</span><span class="k">Spent</span><b>${money(mt.out)}</b><small>${plural(nOut, 'transaction')}${tot ? ` · ${pOut}%` : ''}</small></a>
+      </div>
     </section>
     ${newInbox().length ? `<div class="only-phone c12" style="--o:2">${reviewStrip()}</div><div class="only-desk c12">${tray(4)}</div>` : ''}
     <div class="c12 only-phone" style="--o:3">
@@ -1376,6 +1439,10 @@ const A = {
     acctMenu(el.dataset.id); },
   openAcct: el => acctMenu(el.dataset.id),
   sheetAll: el => acctMenu(el.dataset.id, true),
+  qrPick: el => qrPick(el.dataset.id),
+  qrDel: el => qrDel(el.dataset.id),
+  qrShow: el => qrShow(el.dataset.id),
+  qrClose: el => el.remove(),
   sheetHide: el => { S.settings.hideAmounts = !S.settings.hideAmounts; saveSettings(); render(); acctMenu(el.dataset.id); },
   sheetAdd: el => { const id = el.dataset.id, k = el.dataset.k; closeModal();
     if (k === 'transfer') return activeAccounts().length > 1 ? txForm({ kind: 'transfer', account_id: id }) : toast('Add two accounts first');
