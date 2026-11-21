@@ -6,9 +6,32 @@
   "scope": "./",
   "id": "./",
   "display": "standalone",
-  "background_color": "#0E1427",
-  "theme_color": "#0E1427",
+  "background_color": "#070B18",
+  "theme_color": "#070B18",
   "icons": [
-    { "src": "brand/scry-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+    {
+      "src": "brand/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "brand/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "brand/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "brand/scry-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
   ]
 }

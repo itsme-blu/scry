@@ -463,8 +463,8 @@ function render() {
 
 // ---------- Penny, the AI accountant ----------
 // Chat lives only in this browser tab (sessionStorage); Penny herself runs as a Supabase Edge Function.
-S.penny = (() => { try { return JSON.parse(sessionStorage.getItem('scry-penny') || '[]'); } catch { return []; } })();
-const savePenny = () => { try { sessionStorage.setItem('scry-penny', JSON.stringify(S.penny.slice(-30))); } catch { /* ignore */ } };
+S.penny = (() => { try { return JSON.parse(localStorage.getItem('scry-penny') || sessionStorage.getItem('scry-penny') || '[]'); } catch { return []; } })();
+const savePenny = () => { try { localStorage.setItem('scry-penny', JSON.stringify(S.penny.slice(-40))); } catch { /* storage full or blocked */ } };
 const PENNY_STARTERS = ['How am I doing this month?', 'Where can I cut back?', 'Suggest budgets for next month', 'What bills are coming up?', 'Am I mixing Daybreak and personal money?'];
 function pennyText(t) {
   // Safe mini-markdown: escape first, then **bold**, bullet lines and line breaks.
@@ -473,19 +473,31 @@ function pennyText(t) {
     .replace(/((?:<li>.*<\/li>\n?)+)/g, m => `<ul>${m.replace(/\n/g, '')}</ul>`)
     .replace(/\n/g, '<br>');
 }
+const PENNY_CARDS = [
+  ['How am I doing this month?', 'activity', 'This month'],
+  ['Where can I cut back?', 'scissors', 'Cut back'],
+  ['What bills are coming up?', 'calendar-days', 'Bills ahead'],
+  ['Suggest budgets for next month', 'pie-chart', 'Budgets'],
+];
 function vPenny() {
+  const off = S.pennyBusy || isDemo();
+  const av = `<span class="pav" aria-hidden="true">${IC('sparkles', 'sm')}</span>`;
   const msgs = S.penny.map((m, i) => m.role === 'user'
-    ? `<div class="pm me"><div class="bubble">${m.photo ? `<span class="photo-tag">${IC('camera', 'sm')} Photo</span> ` : ''}${esc(m.content)}</div></div>`
-    : `<div class="pm her"><span class="penny-dot lg" aria-hidden="true">P</span><div class="bubble ${m.error ? 'err' : ''}">${pennyText(m.content)}${pennySaveBtn(m, i)}</div></div>`).join('');
-  const intro = `<div class="pm her"><span class="penny-dot lg" aria-hidden="true">P</span><div class="bubble">Hi Blu, I'm <b>Penny</b>, your accountant here in Scry. I can see your accounts, spending, budgets and bills, and I'll keep Daybreak's money separate from yours. Ask me anything about your finances.${isDemo() ? '<br><br><span class="warn">In demo mode I\'m asleep: I only work with your live data.</span>' : ''}</div></div>`;
-  return ph('AI accountant', 'Ask Penny', 'Money questions only. She reads your Scry data and never changes it.',
-      S.penny.length ? '<button class="btn ghost sm" data-a="pennyClear">New conversation</button>' : '')
-  + `<section class="card penny-card"><div class="penny-log" id="pennyLog" aria-live="polite">${intro}${msgs}${S.pennyBusy ? '<div class="pm her"><span class="penny-dot lg" aria-hidden="true">P</span><div class="bubble typing">Penny is looking at your numbers…</div></div>' : ''}</div>
-    ${S.penny.length ? '' : `<div class="catpick starters">${PENNY_STARTERS.map(q => `<button data-a="pennyAsk" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div>`}
-    <form class="penny-form" onsubmit="return false"><textarea id="pennyIn" rows="2" placeholder="Ask about your money… e.g. Can I afford a ₱5,000 phone this month?" ${S.pennyBusy || isDemo() ? 'disabled' : ''}></textarea>
-      <button type="button" class="btn cam" data-a="pennyScan" aria-label="Show Penny a photo of a bill or receipt" title="Scan a bill or receipt" ${S.pennyBusy || isDemo() ? 'disabled' : ''}>${IC('camera')}</button>
-      <button class="btn pri" data-a="pennySend" ${S.pennyBusy || isDemo() ? 'disabled' : ''}>Ask</button></form>
-    <div class="xs faint" style="margin-top:8px">Penny uses Claude (Anthropic). Your question and a summary of your Scry data are sent to Claude to answer. She's not a licensed financial adviser.</div></section>`;
+    ? `<div class="pm2 me"><div class="bub">${m.photo ? `<span class="photo-tag">${IC('camera', 'sm')} Photo</span> ` : ''}${esc(m.content)}</div></div>`
+    : `<div class="pm2 her">${av}<div class="bub ${m.error ? 'err' : ''}">${pennyText(m.content)}${pennySaveBtn(m, i)}</div></div>`).join('');
+  const welcome = `<div class="pwelcome"><span class="pav xl" aria-hidden="true">${IC('sparkles')}</span>
+      <h2>Hi Blu, I'm Penny</h2><p>Your accountant in Scry. I see your accounts, spending, budgets and bills, and keep Daybreak's money apart from yours.</p>
+      ${isDemo() ? '<p class="warn">In demo mode I\'m asleep: I only work with your live data.</p>' : ''}
+      <div class="pcards">${PENNY_CARDS.map(([q, ic, k]) => `<button data-a="pennyAsk" data-q="${esc(q)}" ${off ? 'disabled' : ''}><span class="ic">${IC(ic, 'sm')}</span><small>${esc(k)}</small><b>${esc(q)}</b></button>`).join('')}</div></div>`;
+  return `<div class="phead">${av}<div class="grow"><b>Penny</b><small>Your AI accountant · money questions only</small></div>
+      ${S.penny.length ? `<button class="ash-btn pnew" data-a="pennyClear" aria-label="Start a new conversation">${IC('square-pen', 'sm')}</button>` : ''}</div>
+    <div class="plog" id="pennyLog" aria-live="polite">${S.penny.length ? msgs : welcome}${!S.pennyBusy && S.penny.length && S.penny[S.penny.length - 1].role === 'user' ? `<div class="pm2 her">${av}<div class="bub err">Penny didn't get to answer that one. <button class="pretry" data-a="pennyRetry">${IC('rotate-ccw', 'sm')} Ask again</button></div></div>` : ''}${S.pennyBusy ? `<div class="pm2 her">${av}<div class="bub typing"><i></i><i></i><i></i></div></div>` : ''}</div>
+    <form class="pcomp" onsubmit="return false">
+      <button type="button" class="pc-cam" data-a="pennyScan" aria-label="Show Penny a photo of a bill or receipt" ${off ? 'disabled' : ''}>${IC('camera', 'sm')}</button>
+      <textarea id="pennyIn" rows="1" placeholder="Ask Penny about your money…" ${off ? 'disabled' : ''}></textarea>
+      <button class="pc-send" data-a="pennySend" aria-label="Send" ${off ? 'disabled' : ''}>${IC('arrow-up', 'sm')}</button>
+    </form>
+    <div class="pfine">Uses Claude by Anthropic · not a licensed financial adviser</div>`;
 }
 // A scanned photo's details ride on Penny's reply so Blu can save them with one tap.
 function pennySaveBtn(m, i) {
@@ -1380,6 +1392,7 @@ const A = {
   pennyScan: () => pennyScan(),
   pennySave: el => { const m = S.penny[Number(el.dataset.i)]; if (!m?.scan) return; scanResult = m.scan; m.saved = true; savePenny(); showScan(m.scan); },
   pennyClear: () => { S.penny = []; savePenny(); render(); },
+  pennyRetry: () => { const q = S.penny.pop(); savePenny(); pennySend(q.content); },
   tag: el => { S.tag = el.dataset.v; render(); },
   month: el => { const k = el.dataset.k; S[k] = shiftMonth(S[k], Number(el.dataset.v)); render(); },
   billView: el => { S.billView = el.dataset.v; render(); },
@@ -1691,6 +1704,7 @@ async function boot() {
 // Auto-update: phones keep an old copy of the page for a while. On open (and when the app comes back
 // to the foreground) fetch index.html fresh; if it names a newer app.js version, reload once.
 async function checkForUpdate() {
+  if (S.pennyBusy || S.scanBusy) return;
   try {
     const mine = (document.querySelector('script[src^="app.js"]')?.getAttribute('src') || '').split('v=')[1];
     const html = await fetch('index.html?check=' + Date.now(), { cache: 'no-store' }).then(r => r.text());
@@ -1703,4 +1717,5 @@ async function checkForUpdate() {
 }
 document.addEventListener('visibilitychange', () => { if (!document.hidden) checkForUpdate(); });
 checkForUpdate();
+if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => { /* still works without it */ });
 boot();
