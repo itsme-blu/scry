@@ -615,19 +615,112 @@ const CARD_ART = {
 };
 const CARD_HEAD = {
   maribank: () => '',
-  gotyme: () => '',
+  gotyme: () => '<img class="hd-gt" src="brand/cards/gotyme-logo-white.svg" alt="GoTyme">',
   gcash: () => '<img class="hd-gc" src="brand/cards/gcash-icon-white.svg" alt=""><span class="nm">GCash</span>',
   wise: a => `<img class="hd-wise" src="brand/cards/wise-logo.svg" alt="Wise">${a.currency !== 'PHP' || /wise\s+\w+/i.test(a.name) ? `<span class="cur">${esc(a.currency)}</span>` : ''}`,
 };
-function bankCard(a, bal) {
+function bankCard(a, bal, o = {}) {
   const brand = a.bank || (a.type === 'cash' ? 'cash' : a.type === 'credit' ? 'credit' : 'other');
   const art = CARD_ART[brand]?.() || '';
-  const head = CARD_HEAD[brand] ? CARD_HEAD[brand](a) : `<span class="lg">${accIcon(a, 30)}</span><span class="nm">${esc(a.name)}</span>`;
+  let head = CARD_HEAD[brand] ? CARD_HEAD[brand](a) : `<span class="lg">${accIcon(a, 30)}</span><span class="nm">${esc(a.name)}</span>`;
+  if (o.count) head = head.replace(/<span class="cur">.*?<\/span>/, '') + `<span class="cur">${o.count} accounts</span>`;
   const chip = brand === 'maribank' ? '' : '<span class="chip" aria-hidden="true"></span>';
-  return `<div class="bcard" data-brand="${brand}" data-a="cardMenu" data-id="${a.id}" role="button" tabindex="0" aria-label="${esc(a.name)}, ${money(bal, a.currency)}">
+  const cur = o.cur || a.currency, id = o.id || a.id;
+  return `<div class="bcard" data-brand="${brand}" data-a="cardMenu" data-id="${id}" role="button" tabindex="0" aria-label="${esc(o.count ? (BANKS[a.bank]?.name || a.name) : a.name)}, ${money(bal, cur)}">
     ${art}<div class="top">${head}</div>${chip}
-    <div class="bot"><div class="k">Balance</div><div class="m ${bal < 0 ? 'neg' : ''}">${money(bal, a.currency)}</div></div></div>`;
+    <div class="bot"><div class="k">${o.count ? 'Total' : 'Balance'}${o.note ? ` · ${esc(o.note)}` : ''}</div><div class="m ${bal < 0 ? 'neg' : ''}">${money(bal, cur)}</div></div></div>`;
 }
+// Several accounts at one bank (Wise PHP/USD/CAD) show as one card; tap it to see each one.
+function walletItems(list) {
+  const out = [], seen = {};
+  for (const a of list) {
+    if (a.bank && a.bank !== 'other' && list.filter(x => x.bank === a.bank).length > 1) {
+      if (seen[a.bank]) { seen[a.bank].accs.push(a); continue; }
+      seen[a.bank] = { key: 'g:' + a.bank, bank: a.bank, accs: [a] }; out.push(seen[a.bank]);
+    } else out.push({ key: a.id, accs: [a] });
+  }
+  return out;
+}
+function groupTotal(accs, b) {        // in pesos; accounts without a rate are left out and noted
+  let t = 0, missing = 0; for (const a of accs) { const r = rate(a.currency); if (r == null) { if (Math.abs(b[a.id]) > 0.004) missing++; continue; } t += b[a.id] * r; }
+  return { t, missing };
+}
+function walletCard(it, b) {
+  if (it.accs.length === 1) return bankCard(it.accs[0], b[it.accs[0].id]);
+  const lead = it.accs.find(a => a.currency === 'PHP') || it.accs[0], g = groupTotal(it.accs, b);
+  return bankCard(lead, g.t, { id: it.key, cur: 'PHP', count: it.accs.length, note: g.missing ? 'some not counted' : '' });
+}
+const itemValue = (it, b) => groupTotal(it.accs, b).t;
+// Wallet stack on phone Home: swipe the front card to send it to the back, tap a peeking card to bring it forward.
+function stackOrder(items) {
+  let ord = []; try { ord = JSON.parse(localStorage.getItem('scry-stack') || '[]'); } catch { /* fresh order */ }
+  const pos = k => ord.indexOf(k);
+  // unknown cards keep their natural place (biggest balance in front); remembered ones follow the saved order
+  return items.slice().sort((x, y) => { const px = pos(x.key), py = pos(y.key); return px < 0 || py < 0 ? 0 : px - py; });
+}
+function saveStack() { try { localStorage.setItem('scry-stack', JSON.stringify([...document.querySelectorAll('#wstack .bcard')].map(c => c.dataset.id))); } catch { /* per-browser nicety only */ } }
+function stackFront(card) {               // move this card to the front (end of the list)
+  const st = card.parentElement; st.appendChild(card); card.classList.remove('cin'); void card.offsetWidth; card.classList.add('cin'); saveStack();
+}
+function stackSendBack(card) {            // send the front card to the back (start of the list)
+  const st = card.parentElement; card.style.transition = ''; card.style.transform = ''; card.style.opacity = '';
+  st.insertBefore(card, st.firstElementChild); card.classList.remove('cin');
+  const f = st.lastElementChild; f.classList.remove('cin'); void f.offsetWidth; f.classList.add('cin'); saveStack();
+}
+let drag = null;
+// Light flick up (or sideways) on the front card sends it to the back. Speed counts, not just distance.
+document.addEventListener('pointerdown', ev => {
+  const card = ev.target.closest('#wstack .bcard'); if (!card || card !== card.parentElement.lastElementChild || card.parentElement.children.length < 2) return;
+  drag = { card, x: ev.clientX, y: ev.clientY, dx: 0, dy: 0, moved: false, id: ev.pointerId, pts: [[ev.clientX, ev.clientY, performance.now()]] };
+});
+document.addEventListener('pointermove', ev => {
+  if (!drag || ev.pointerId !== drag.id) return;
+  const dx = ev.clientX - drag.x, dy = ev.clientY - drag.y;
+  if (!drag.moved) {
+    if (Math.hypot(dx, dy) < 6) return;
+    if (dy > Math.abs(dx)) { drag = null; return; }              // pulling down = let the page scroll
+    drag.moved = true; drag.card.setPointerCapture?.(ev.pointerId); drag.card.style.transition = 'none';
+  }
+  drag.dx = dx; drag.dy = Math.min(dy, 12);
+  drag.pts.push([ev.clientX, ev.clientY, performance.now()]); if (drag.pts.length > 5) drag.pts.shift();
+  drag.card.style.transform = `translate(${dx * .9}px, ${drag.dy}px) rotate(${dx / 30}deg)`;
+  ev.preventDefault();
+}, { passive: false });
+function endDrag() {
+  if (!drag) return; const { card, dx, dy, moved, pts } = drag; drag = null;
+  if (!moved) return;
+  window.__justDragged = true; setTimeout(() => { window.__justDragged = false; }, 80);
+  const [x0, y0, t0] = pts[0], [x1, y1, t1] = pts[pts.length - 1], dt = Math.max(t1 - t0, 1);
+  const vx = (x1 - x0) / dt, vy = (y1 - y0) / dt;                // px per ms
+  const up = dy < -35 || vy < -0.35, side = Math.abs(dx) > 70 || Math.abs(vx) > 0.45;
+  if (up || side) {
+    card.style.transition = 'transform .24s cubic-bezier(.3,.7,.4,1), opacity .24s';
+    card.style.transform = up && !(Math.abs(dx) > Math.abs(dy) * 1.2)
+      ? `translateY(-75%) scale(.94) rotate(${dx / 40}deg)`
+      : `translateX(${dx > 0 ? 125 : -125}%) rotate(${dx > 0 ? 10 : -10}deg)`;
+    card.style.opacity = '0';
+    setTimeout(() => stackSendBack(card), 230);
+  } else { card.style.transition = 'transform .3s cubic-bezier(.2,.9,.25,1.15)'; card.style.transform = ''; }
+}
+document.addEventListener('pointerup', endDrag);
+document.addEventListener('pointercancel', endDrag);
+
+function acctMenu(id) {
+  const a = acc(id), bal = balances()[a.id];
+  modal(a.name, `<div class="cardmenu">${bankCard(a, bal)}<div class="xs faint" style="text-align:center;margin:10px 0 4px">${matchedLabel(a.id)}</div>
+    <div class="addgrid"><button data-a="cardActivity" data-id="${a.id}"><span class="b">${IC('activity')}</span><b>Activity</b><small>Everything in ${esc(a.name)}</small></button>
+    <button data-a="matchAccount" data-id="${a.id}"><span class="b gold">${IC('scale')}</span><b>Match balance</b><small>Line up with your bank app</small></button>
+    <button data-a="editAccount" data-id="${a.id}" class="wide"><span class="b">${IC('pencil')}</span><b>Edit account</b><small>Name, type, auto-detect</small></button></div></div>`);
+}
+function groupMenu(bank) {
+  const b = balances(), accs = activeAccounts().filter(a => a.bank === bank), it = { key: 'g:' + bank, accs };
+  modal(BANKS[bank]?.name || 'Accounts', `<div class="cardmenu">${walletCard(it, b)}
+    <div class="sublist">${accs.map(a => `<button class="subrow" data-a="openAcct" data-id="${a.id}"><span class="cur">${esc(a.currency)}</span>
+      <span class="main"><b>${esc(a.name)}</b><small>${matchedLabel(a.id)}</small></span>
+      <span class="amt ${b[a.id] < 0 ? 'neg' : ''}">${money(b[a.id], a.currency)}</span>${IC('chevron-right', 'sm')}</button>`).join('')}</div>
+    ${accs.some(a => rate(a.currency) == null) ? `<div class="xs faint" style="margin-top:10px">${accs.filter(a => rate(a.currency) == null).map(a => a.currency).join(', ')} not in the total yet: <a href="#settings" data-a="close">set the rate</a></div>` : ''}</div>`);
+}
+
 function vHome() {
   const w = worth(), mt = monthTotals(thisMonth()), up = upcoming(45), b = balances();
   const nm = String(S.user?.user_metadata?.own_names || '').split(',')[0].trim().split(' ')[0] || 'Blu';
@@ -635,6 +728,9 @@ function vHome() {
   const whole = hidden ? money(w.net) : money(w.net).replace(/\.\d\d$/, ''), cents = hidden ? '' : money(w.net).slice(-3);
   const accAll = activeAccounts().slice().sort((x, y) => (b[x.id] * (rate(x.currency) ?? 0)) - (b[y.id] * (rate(y.currency) ?? 0)));
   const accs = accAll.some(a => Math.abs(b[a.id]) > 0.004) ? accAll.filter(a => Math.abs(b[a.id]) > 0.004) : accAll;   // smallest first, biggest in front
+  const funded = it => it.accs.some(a => Math.abs(b[a.id]) > 0.004);
+  const allItems = walletItems(accAll).sort((x, y) => itemValue(x, b) - itemValue(y, b));
+  const homeItems = allItems.some(funded) ? allItems.filter(funded) : allItems;      // smallest first, biggest in front
   const recent = S.d.transactions.filter(tagOK).sort((x, y) => y.date.localeCompare(x.date) || (y.created_at || '').localeCompare(x.created_at || '')).slice(0, 4);
   const mtx = txInMonth(thisMonth()).filter(tagOK), nIn = mtx.filter(t => t.kind === 'income').length, nOut = mtx.filter(t => t.kind === 'expense').length;
   const tot = mt.inc + mt.out, pIn = tot ? Math.round(mt.inc / tot * 100) : 0, pOut = tot ? 100 - pIn : 0;
@@ -660,11 +756,11 @@ function vHome() {
     </section>
     ${newInbox().length ? `<div class="only-phone c12" style="--o:2">${reviewStrip()}</div><div class="only-desk c12">${tray(4)}</div>` : ''}
     <div class="c12 only-phone" style="--o:3">
-      <div class="wstack">${accs.map(a => bankCard(a, b[a.id])).join('')}</div>
+      <div class="wstack" id="wstack">${stackOrder(homeItems).map(it => walletCard(it, b)).join('')}</div>
       <a class="wlink" href="#accounts">${accAll.length} account${accAll.length === 1 ? '' : 's'} in your wallet ${IC('chevron-right', 'sm')}</a>
     </div>
     <div class="c12 only-desk"><div class="sechead"><b class="cap">Wallet</b><a href="#accounts">See all</a></div>
-      <div class="cardgrid">${accs.slice().reverse().map(a => bankCard(a, b[a.id])).join('')}</div></div>
+      <div class="cardgrid">${homeItems.slice().reverse().map(it => walletCard(it, b)).join('')}</div></div>
     ${quick.length ? `<div class="qcats c12" style="--o:4">${quick.map(c => `<button data-a="quickCat" data-id="${c.id}"><span>${IC(catLucide(c))}</span><b>${esc(c.name.split(/[ &]/)[0])}</b></button>`).join('')}</div>` : ''}
     <a class="rowlink c12" style="--o:6" href="#budget"><span><b>${nBud ? 'Budgets' : 'Set budgets'}</b>${nBud ? `<small>${nBud} set for ${monthName(thisMonth()).split(' ')[0]}</small>` : '<small>Give every peso a job</small>'}</span>${IC('chevron-right')}</a>
     <div class="${recent.length ? 'c6' : 'c12'}" style="--o:7"><section class="card"><div class="sh"><b class="cap">Upcoming</b><span class="grow"></span><a href="#bills" class="xs">All bills</a></div>
@@ -779,7 +875,7 @@ function vAccounts() {
     <div class="v">${money(w.net)}</div>
     <div class="nw2"><div><span>Assets</span><b>${money(w.own)}</b></div><div><span>Liabilities</span><b>${money(-w.owe)}</b></div></div>
     ${w.missing.length ? `<div class="fine">Not counted: ${w.missing.join(', ')} · <a href="#settings">set rate</a></div>` : ''}</section>
-  <div class="cardgrid wallet">${list.map(a => bankCard(a, b[a.id])).join('')}
+  <div class="cardgrid wallet">${walletItems(list).sort((x, y) => itemValue(y, b) - itemValue(x, b)).map(it => walletCard(it, b)).join('')}
     <button class="bcard addcard" data-a="addAccount">${IC('plus', 'lg')}<span>Add account</span></button></div>`;
 }
 
@@ -1209,10 +1305,12 @@ const A = {
   addBill: () => billForm(),
   toggleHide: () => { S.settings.hideAmounts = !S.settings.hideAmounts; saveSettings(); render(); },
   quickCat: el => { if (!activeAccounts().length) return (toast('Add an account first'), accountForm()); txForm({ kind: 'expense', category_id: el.dataset.id }); },
-  cardMenu: el => { const a = acc(el.dataset.id), bal = balances()[a.id]; modal(a.name, `<div class="cardmenu">${bankCard(a, bal)}<div class="xs faint" style="text-align:center;margin:10px 0 4px">${matchedLabel(a.id)}</div>
-      <div class="addgrid"><button data-a="cardActivity" data-id="${a.id}"><span class="b">${IC('activity')}</span><b>Activity</b><small>Everything in ${esc(a.name)}</small></button>
-      <button data-a="matchAccount" data-id="${a.id}"><span class="b gold">${IC('scale')}</span><b>Match balance</b><small>Line up with your bank app</small></button>
-      <button data-a="editAccount" data-id="${a.id}" class="wide"><span class="b">${IC('pencil')}</span><b>Edit account</b><small>Name, type, auto-detect</small></button></div></div>`); },
+  cardMenu: el => { if (window.__justDragged) return; if (el.closest('#wstack') && el !== el.parentElement.lastElementChild) return stackFront(el);
+    if (el.closest('.cardmenu')) return;
+    if (el.dataset.id.startsWith('g:')) return groupMenu(el.dataset.id.slice(2));
+    acctMenu(el.dataset.id); },
+  openAcct: el => acctMenu(el.dataset.id),
+  cardActivityAll: el => { closeModal(); S.f.account = ''; S.f.q = el.dataset.q; location.hash = 'tx'; },
   cardActivity: el => { closeModal(); S.f.account = el.dataset.id; location.hash = 'tx'; },
   matchAccount: el => { closeModal(); matchForm(acc(el.dataset.id)); },
   matchShot: el => matchShot(el.dataset.id),

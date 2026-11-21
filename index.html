@@ -692,7 +692,7 @@ details.orig div{margin-top:8px;padding:10px 12px;border-radius:14px;background:
 /* v17: real card art + official logos */
 .bcard .art{position:absolute;z-index:0;pointer-events:none}
 .bcard .art.full{inset:0;width:100%;height:100%;object-fit:cover}
-.bcard[data-brand="maribank"]{background:#FF6A00}
+.bcard[data-brand="maribank"]{background:#F95F00}
 .bcard[data-brand="maribank"]::before{display:none}
 .bcard .art.mtop{left:0;top:0;width:100%;height:auto}
 .bcard[data-brand="maribank"] .bot{text-shadow:0 1px 3px rgba(120,40,0,.45)}
@@ -724,6 +724,29 @@ details.orig div{margin-top:8px;padding:10px 12px;border-radius:14px;background:
   .cardgrid.wallet .bcard[data-brand="gotyme"] .chip{top:10px;right:12px}
   .cardgrid.wallet .bcard .top .cur{font-size:9px;padding:2px 6px}
 }
+/* v18: swipeable wallet stack */
+.wstack{touch-action:pan-y;user-select:none;-webkit-user-select:none}
+.wstack .bcard{transition:transform .25s cubic-bezier(.2,.8,.2,1)}
+.wstack .bcard:not(:last-child):hover{transform:translateY(-4px)}
+.wstack .bcard:last-child{cursor:grab}
+@keyframes cardIn{from{transform:translateY(-26px) scale(.96)}to{transform:none}}
+.wstack .bcard.cin{animation:cardIn .3s cubic-bezier(.2,.8,.2,1)}
+.wstack+.wlink::before{content:"Swipe the front card · ";color:var(--faint)}
+/* v19: grouped bank card + its account list */
+.sublist{display:flex;flex-direction:column;gap:8px;margin-top:14px}
+.subrow{all:unset;box-sizing:border-box;cursor:pointer;display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:12px;align-items:center;padding:12px 14px;border-radius:16px;background:rgba(255,255,255,.05);border:1px solid var(--line);color:var(--ink)}
+.subrow:hover{background:rgba(255,255,255,.09)}
+.subrow .cur{font:800 12px var(--display);letter-spacing:.06em;padding:6px 9px;border-radius:10px;background:#9FE870;color:#163300}
+.subrow b{display:block;font-size:15px} .subrow small{font-size:12px;color:var(--faint)}
+.subrow .amt{font:700 16px var(--display);font-variant-numeric:tabular-nums}
+/* v20: smooth flick-up stack */
+.wstack .bcard:last-child{touch-action:none;will-change:transform}
+@keyframes cardIn{from{transform:translateY(22px) scale(.97);filter:brightness(.85)}to{transform:none;filter:none}}
+.wstack .bcard.cin{animation:cardIn .34s cubic-bezier(.2,.9,.25,1)}
+.wstack+.wlink::before{content:"Flick the front card up · "}
+.bcard .art.mtop{-webkit-mask:linear-gradient(180deg,#000 85%,transparent);mask:linear-gradient(180deg,#000 85%,transparent)}
+.bcard .hd-gt{height:22px;width:auto}
+.cardgrid.wallet .bcard .hd-gt{height:15px}
 </style>
 </head>
 <body>
@@ -732,6 +755,6 @@ details.orig div{margin-top:8px;padding:10px 12px;border-radius:14px;background:
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
 <script src="config.js?v=3" onerror="void 0"></script>
-<script src="app.js?v=17"></script>
+<script src="app.js?v=20"></script>
 </body>
 </html>
