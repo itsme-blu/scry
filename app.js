@@ -689,7 +689,7 @@ document.addEventListener('pointermove', ev => {
   if (!drag.moved) {
     if (Math.hypot(dx, dy) < 6) return;
     if (dy > Math.abs(dx)) { drag = null; return; }              // pulling down = let the page scroll
-    drag.moved = true; drag.card.setPointerCapture?.(ev.pointerId); drag.card.style.transition = 'none';
+    drag.moved = true; try { drag.card.setPointerCapture(ev.pointerId); } catch { /* synthetic or lost pointer */ } drag.card.style.transition = 'none';
   }
   drag.dx = dx; drag.dy = Math.min(dy, 12);
   drag.pts.push([ev.clientX, ev.clientY, performance.now()]); if (drag.pts.length > 5) drag.pts.shift();
@@ -715,20 +715,53 @@ function endDrag() {
 document.addEventListener('pointerup', endDrag);
 document.addEventListener('pointercancel', endDrag);
 
-function acctMenu(id) {
-  const a = acc(id), bal = balances()[a.id];
-  modal(a.name, `<div class="cardmenu">${bankCard(a, bal)}<div class="xs faint" style="text-align:center;margin:10px 0 4px">${matchedLabel(a.id)}</div>
-    <div class="addgrid"><button data-a="cardActivity" data-id="${a.id}"><span class="b">${IC('activity')}</span><b>Activity</b><small>Everything in ${esc(a.name)}</small></button>
-    <button data-a="matchAccount" data-id="${a.id}"><span class="b gold">${IC('scale')}</span><b>Match balance</b><small>Line up with your bank app</small></button>
-    <button data-a="editAccount" data-id="${a.id}" class="wide"><span class="b">${IC('pencil')}</span><b>Edit account</b><small>Name, type, auto-detect</small></button></div></div>`);
+// Account sheet (tap a card): the bank's own colour, big balance, its transactions, and add buttons for this account.
+const SHEET_TONE = { wise: 'wise', gotyme: 'gotyme', gcash: 'gcash', maribank: 'maribank', cash: 'cash' };
+function sheet(tone, body, foot = '') {
+  lastFocus = document.activeElement;
+  $('#modal-root').innerHTML = `<div class="scrim" data-a="closeScrim"><div class="modal asheet" data-tone="${tone}" role="dialog" aria-modal="true">${body}${foot ? `<div class="asheet-foot">${foot}</div>` : ''}</div></div>`;
+  drawIcons();
+}
+function acctTxRow(t, a) {
+  const c = cat(t.category_id), cur = curOf(a.id);
+  let title, amt, cls, ico;
+  if (t.kind === 'transfer') {
+    const out = t.account_id === a.id, other = acc(out ? t.to_account_id : t.account_id);
+    title = isAdj(t) ? ADJ : `Transfer ${out ? 'to' : 'from'} ${other?.name || '?'}`; ico = IC(out ? 'arrow-up-right' : 'arrow-down-left', 'sm');
+    const v = out ? num(t.amount) : (t.to_amount != null ? num(t.to_amount) : num(t.amount));
+    amt = (out ? '−' : '+') + money(v, cur); cls = out ? '' : 'pos';
+  } else {
+    title = isAdj(t) ? ADJ : (t.note || c?.name || (t.kind === 'income' ? 'Income' : 'Expense'));
+    ico = isAdj(t) ? IC('scale', 'sm') : t.kind === 'income' ? IC('banknote', 'sm') : (c?.icon ? esc(c.icon) : IC('receipt', 'sm'));
+    amt = (t.kind === 'income' ? '+' : '−') + money(num(t.amount), cur); cls = t.kind === 'income' ? 'pos' : 'neg';
+  }
+  return `<button class="atx" data-a="editTx" data-id="${t.id}"><span class="ic">${ico}</span><span class="main"><b>${esc(title)}</b><small>${longDay(t.date)}</small></span><span class="amt ${cls}">${amt}</span>${IC('chevron-right', 'sm')}</button>`;
+}
+function acctMenu(id, all = false) {
+  const a = acc(id), bal = balances()[a.id], tone = SHEET_TONE[a.bank || (a.type === 'cash' ? 'cash' : '')] || 'other';
+  const txs = S.d.transactions.filter(t => t.account_id === a.id || t.to_account_id === a.id)
+    .sort((x, y) => y.date.localeCompare(x.date) || (y.created_at || '').localeCompare(x.created_at || ''));
+  const shown = all ? txs : txs.slice(0, 6);
+  sheet(tone, `<div class="ash-top"><button class="ash-btn" data-a="close" aria-label="Close">${IC('x')}</button><span class="grow"></span>
+      <button class="ash-btn" data-a="sheetHide" data-id="${a.id}" aria-label="Hide or show amounts">${IC(S.settings.hideAmounts ? 'eye-off' : 'eye')}</button>
+      <button class="ash-btn" data-a="matchAccount" data-id="${a.id}" aria-label="Match to your bank app">${IC('scale')}</button>
+      <button class="ash-btn" data-a="editAccount" data-id="${a.id}" aria-label="Edit account">${IC('pencil')}</button></div>
+    <div class="ash-head"><h2>${esc(a.name)}</h2><div class="cap">${esc(ACCOUNT_TYPES[a.type]?.[0] || a.type)} · ${esc(a.currency)}</div></div>
+    <div class="ash-bal"><div class="cap">Current balance</div><div class="v ${bal < 0 ? 'neg' : ''}">${money(bal, a.currency)}</div><div class="ash-match">${matchedLabel(a.id)}</div></div>
+    <section class="ash-card"><div class="ash-ch"><b class="cap">Transactions</b><span class="grow"></span><span class="xs">${txs.length}</span></div>
+      ${shown.length ? shown.map(t => acctTxRow(t, a)).join('') : '<div class="ash-empty">Nothing here yet.</div>'}
+      ${!all && txs.length > 6 ? `<button class="ash-more" data-a="sheetAll" data-id="${a.id}">See all ${txs.length} ${IC('chevron-down', 'sm')}</button>` : ''}</section>`,
+    `<button class="ash-add out" data-a="sheetAdd" data-k="expense" data-id="${a.id}">${IC('plus', 'sm')} Expense</button>
+     <button class="ash-add tr" data-a="sheetAdd" data-k="transfer" data-id="${a.id}">${IC('arrow-left-right', 'sm')} Transfer</button>
+     <button class="ash-add in" data-a="sheetAdd" data-k="income" data-id="${a.id}">${IC('plus', 'sm')} Income</button>`);
 }
 function groupMenu(bank) {
-  const b = balances(), accs = activeAccounts().filter(a => a.bank === bank), it = { key: 'g:' + bank, accs };
-  modal(BANKS[bank]?.name || 'Accounts', `<div class="cardmenu">${walletCard(it, b)}
-    <div class="sublist">${accs.map(a => `<button class="subrow" data-a="openAcct" data-id="${a.id}"><span class="cur">${esc(a.currency)}</span>
-      <span class="main"><b>${esc(a.name)}</b><small>${matchedLabel(a.id)}</small></span>
-      <span class="amt ${b[a.id] < 0 ? 'neg' : ''}">${money(b[a.id], a.currency)}</span>${IC('chevron-right', 'sm')}</button>`).join('')}</div>
-    ${accs.some(a => rate(a.currency) == null) ? `<div class="xs faint" style="margin-top:10px">${accs.filter(a => rate(a.currency) == null).map(a => a.currency).join(', ')} not in the total yet: <a href="#settings" data-a="close">set the rate</a></div>` : ''}</div>`);
+  const b = balances(), accs = activeAccounts().filter(a => a.bank === bank), g = groupTotal(accs, b);
+  sheet(SHEET_TONE[bank] || 'other', `<div class="ash-top"><button class="ash-btn" data-a="close" aria-label="Close">${IC('x')}</button></div>
+    <div class="ash-head"><h2>${esc(BANKS[bank]?.name || 'Accounts')}</h2><div class="cap">${accs.length} accounts</div></div>
+    <div class="ash-bal"><div class="cap">Total in pesos</div><div class="v">${money(g.t)}</div>${g.missing ? '<div class="ash-match">Some currencies have no rate yet</div>' : ''}</div>
+    <section class="ash-card">${accs.map(a => `<button class="atx" data-a="openAcct" data-id="${a.id}"><span class="ic cur">${esc(a.currency)}</span><span class="main"><b>${esc(a.name)}</b><small>${matchedLabel(a.id)}</small></span><span class="amt">${money(b[a.id], a.currency)}</span>${IC('chevron-right', 'sm')}</button>`).join('')}</section>
+    ${accs.some(a => rate(a.currency) == null) ? `<div class="ash-match" style="margin-top:12px">${accs.filter(a => rate(a.currency) == null).map(a => a.currency).join(', ')} not in the total yet · <a href="#settings" data-a="close">set the rate</a></div>` : ''}`);
 }
 
 function vHome() {
@@ -1320,6 +1353,11 @@ const A = {
     if (el.dataset.id.startsWith('g:')) return groupMenu(el.dataset.id.slice(2));
     acctMenu(el.dataset.id); },
   openAcct: el => acctMenu(el.dataset.id),
+  sheetAll: el => acctMenu(el.dataset.id, true),
+  sheetHide: el => { S.settings.hideAmounts = !S.settings.hideAmounts; saveSettings(); render(); acctMenu(el.dataset.id); },
+  sheetAdd: el => { const id = el.dataset.id, k = el.dataset.k; closeModal();
+    if (k === 'transfer') return activeAccounts().length > 1 ? txForm({ kind: 'transfer', account_id: id }) : toast('Add two accounts first');
+    txForm({ kind: k, account_id: id }); },
   cardActivityAll: el => { closeModal(); S.f.account = ''; S.f.q = el.dataset.q; location.hash = 'tx'; },
   cardActivity: el => { closeModal(); S.f.account = el.dataset.id; location.hash = 'tx'; },
   matchAccount: el => { closeModal(); matchForm(acc(el.dataset.id)); },
