@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Scry app-open test</title>
+<style>
+:root{color-scheme:dark}
+body{margin:0;background:#0B1020;color:#E9ECF5;font:15px/1.45 system-ui,sans-serif;padding:16px}
+h1{font-size:20px;margin:4px 0 6px} p{color:#9AA3B8;margin:0 0 14px}
+.bank{background:#151B30;border:1px solid #263052;border-radius:16px;padding:12px;margin-bottom:12px}
+.bank h2{font-size:16px;margin:0 0 8px;display:flex;align-items:center;gap:8px} .bank h2 img{width:26px;height:26px;border-radius:7px;background:#fff}
+a{display:block;padding:12px 14px;margin:6px 0;border-radius:12px;background:#212A47;color:#fff;text-decoration:none;font-weight:600}
+a small{display:block;font-weight:400;color:#8C95AD;font-size:12px}
+#msg{position:sticky;top:0;background:#3A1E25;color:#FFC2B3;border-radius:12px;padding:10px 12px;margin-bottom:12px;display:none}
+</style></head><body>
+<div id="msg"></div>
+<h1>Which buttons open your apps?</h1>
+<p>Tap each button. If the app opens, note the number (like "GCash 2"), then come back here. If a button didn't work, a red note shows at the top. None of these pays or sends anything; they only try to open the app.</p>
+<div id="list"></div>
+<script>
+const here = location.href.split('#')[0];
+const fb = id => encodeURIComponent(here + '#fail-' + id);
+const APPS = [
+  { name: 'GCash', logo: 'brand/banks/gcash.png', pkg: 'com.globe.gcash.android', schemes: ['gcash'] },
+  { name: 'MariBank', logo: 'brand/banks/maribank.png', pkg: 'ph.seabank.seabank', schemes: ['maribank', 'seabank', 'seabankph'] },
+  { name: 'GoTyme', logo: 'brand/banks/gotyme.png', pkg: 'ph.com.gotyme', schemes: ['gotyme', 'gotymebank'] },
+  { name: 'Wise', logo: 'brand/banks/wise.png', pkg: 'com.transferwise.android', schemes: ['wise', 'transferwise'], web: 'https://wise.com/home' },
+];
+document.getElementById('list').innerHTML = APPS.map(a => {
+  const opts = [];
+  for (const s of a.schemes) opts.push([`intent://open#Intent;scheme=${s};package=${a.pkg};S.browser_fallback_url=${fb(a.name + '-' + (opts.length + 1))};end`, `The app's own link "${s}://"`]);
+  opts.push([`market://launch?id=${a.pkg}`, 'Through Google Play\'s "launch" link']);
+  if (a.web) opts.push([a.web, 'Wise website link (may hand over to the app)']);
+  return `<div class="bank"><h2><img src="${a.logo}" alt="">${a.name}</h2>${opts.map(([h, t], i) => `<a href="${h.replace(/"/g, '&quot;')}">${a.name} ${i + 1}<small>${t}</small></a>`).join('')}</div>`;
+}).join('');
+function showFail() { const m = location.hash.match(/^#fail-(.+)$/); const el = document.getElementById('msg');
+  if (m) { el.textContent = decodeURIComponent(m[1]).replace('-', ' ') + " didn't open the app."; el.style.display = 'block'; } }
+addEventListener('hashchange', showFail); showFail();
+</script>
+</body></html>
