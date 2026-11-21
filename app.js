@@ -411,7 +411,10 @@ async function seedDemo() {
 }
 
 // ---------- shell ----------
-const NAV = [['home', 'Home', '⌂'], ['tx', 'Activity', '⇅'], ['budget', 'Budgets', '◎'], ['bills', 'Bills', '▦'], ['accounts', 'Accounts', '▣']];
+// Lucide icons (lucide@0.460.0, loaded in index.html); drawn into <i data-lucide> after each render.
+const IC = (name, cls = '') => `<i data-lucide="${name}" class="lc ${cls}" aria-hidden="true"></i>`;
+const drawIcons = () => { try { window.lucide?.createIcons(); } catch { /* icons are decoration only */ } };
+const NAV = [['home', 'Home', 'house'], ['tx', 'Activity', 'activity'], ['budget', 'Budgets', 'pie-chart'], ['bills', 'Bills', 'calendar-days'], ['accounts', 'Accounts', 'wallet']];
 function navCounts() { return { home: newInbox().length, tx: 0, bills: overdueBills().length }; }
 function shell() {
   return `<div class="shell">
@@ -421,25 +424,26 @@ function shell() {
       <div class="foot">${isDemo() ? 'Sample data, kept only in this browser. Nothing is sent anywhere.' : esc(S.user?.email || '')}</div></aside>
     <main id="main"></main>
     <nav class="tabbar" id="tabnav" aria-label="Main navigation"></nav>
-    <button class="fab" data-a="addTx" aria-label="Add a transaction"><b>+</b><span>Add</span></button></div>`;
+    <button class="fab" data-a="addTx" aria-label="Add a transaction">${IC('plus', 'lg')}<span>Add</span></button></div>`;
 }
 function renderNav() {
   const c = navCounts(), cnt = k => c[k] ? `<span class="count ${k === 'bills' ? 'risk' : ''}" aria-label="${c[k]} need attention">${c[k]}</span>` : '';
-  const link = ([k, l, i]) => `<a href="#${k}" class="${S.view === k ? 'on' : ''}" ${S.view === k ? 'aria-current="page"' : ''}><span class="ni" aria-hidden="true">${i}</span>${l}${cnt(k)}</a>`;
-  $('#railnav').innerHTML = NAV.map(link).join('') + `<a href="#penny" class="penny-link ${S.view === 'penny' ? 'on' : ''}"><span class="ni penny-dot" aria-hidden="true">P</span>Ask Penny</a>`
-    + '<div class="sep"></div>' + link(['settings', 'Settings', '⚙']);
+  const link = ([k, l, i]) => `<a href="#${k}" class="${S.view === k ? 'on' : ''}" ${S.view === k ? 'aria-current="page"' : ''} aria-label="${l}"><span class="ni">${IC(i)}</span>${l}${cnt(k)}</a>`;
+  $('#railnav').innerHTML = NAV.map(link).join('') + `<a href="#penny" class="penny-link ${S.view === 'penny' ? 'on' : ''}"><span class="ni">${IC('sparkles')}</span>Ask Penny</a>`
+    + '<div class="sep"></div>' + link(['settings', 'Settings', 'settings']);
   $('#tabnav').innerHTML = NAV.map(link).join('');
 }
 function mhead() {
   return `<div class="mhead"><div class="brand"><img class="mark" src="brand/scry-icon.svg" alt="">Scry</div>${isDemo() ? '<span class="demo-pill">Demo</span>' : ''}
-    <a href="#penny" class="gear penny-btn ${S.view === 'penny' ? 'on' : ''}" aria-label="Ask Penny, your AI accountant"><span class="penny-dot">P</span></a>
-    <a href="#settings" class="gear ${S.view === 'settings' ? 'on' : ''}" aria-label="Settings">⚙</a></div>`;
+    <a href="#penny" class="gear penny-btn ${S.view === 'penny' ? 'on' : ''}" aria-label="Ask Penny, your AI accountant" style="color:var(--gold-1)">${IC('sparkles')}</a>
+    <a href="#settings" class="gear ${S.view === 'settings' ? 'on' : ''}" aria-label="Settings">${IC('settings')}</a></div>`;
 }
 function render() {
   if (!$('#main')) $('#root').innerHTML = shell();
   renderNav();
   const V = { home: vHome, tx: vTx, budget: vBudget, bills: vBills, accounts: vAccounts, settings: vSettings, penny: vPenny }[S.view] || vHome;
   $('#main').innerHTML = mhead() + V();
+  drawIcons();
   if (S.view === 'penny') { const log = $('#pennyLog'); if (log) log.scrollTop = log.scrollHeight; }
 }
 
@@ -559,33 +563,62 @@ function vHome() {
     .filter(r => r.bud > 0).sort((x, y) => y.sp / y.bud - x.sp / x.bud).slice(0, 5);
   const byCat = Object.entries(spentByCat(thisMonth())).sort((a, b) => b[1] - a[1]).slice(0, 6), maxCat = byCat[0]?.[1] || 1;
   const recent = S.d.transactions.filter(tagOK).sort((a, b) => b.date.localeCompare(a.date) || (b.created_at || '').localeCompare(a.created_at || '')).slice(0, 5);
-  const ownPct = w.own + -w.owe ? (w.own / (w.own - w.owe)) * 100 : 100, usedPct = mt.inc ? Math.min(100, (mt.out / mt.inc) * 100) : (mt.out ? 100 : 0);
-  return ph(longDay(today()), `${hello}, Blu`, "Here's where your money stands.", tagChips())
-  + (isDemo() && !S.settings.hideBanner ? `<div class="demo-banner" role="note"><span><b>You're looking at demo data.</b> Every number and notification here is a made-up sample, stored only in this browser.</span><button data-a="hideBanner" aria-label="Hide this note">×</button></div>` : '')
-  + tray(4)
-  + `<section class="card penny-strip mb"><span class="penny-dot lg" aria-hidden="true">P</span><div class="grow"><b>Ask Penny</b><div class="xs muted">Your AI accountant. Money questions only.</div></div>
-      <div class="catpick">${PENNY_STARTERS.slice(0, 3).map(q => `<button data-a="pennyAsk" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div></section>`
-  + `<div class="grid g4 mb">
-    <div class="card hero span2"><div class="lbl">Net worth</div><div class="big ${w.net < 0 ? 'neg' : ''}">${money(w.net)}</div>
-      <div class="split" aria-hidden="true"><i style="width:${ownPct}%;background:var(--primary)"></i><i style="width:${100 - ownPct}%;background:var(--risk)"></i></div>
-      <div class="legend"><span style="--c:var(--primary)">Own ${money(w.own)}</span><span style="--c:var(--risk)">Owe ${money(-w.owe)}</span>${w.missing.length ? `<span class="warn">${w.missing.join(', ')} rate not set</span>` : ''}</div></div>
-    <div class="card span2"><div class="lbl">${mon} so far</div>
-      <div class="trio" style="margin-top:6px"><div><div class="xs faint">In</div><div class="mid pos">${money(mt.inc)}</div></div><div><div class="xs faint">Out</div><div class="mid">${money(mt.out)}</div></div><div><div class="xs faint">Left</div><div class="mid ${mt.left < 0 ? 'neg' : ''}">${money(mt.left)}</div></div></div>
-      <div class="bar" style="margin-top:14px" aria-label="${Math.round(usedPct)}% of income spent"><i class="${usedPct > 95 ? 'over' : usedPct > 80 ? 'warn' : ''}" style="width:${usedPct}%"></i></div>
-      <div class="xs faint" style="margin-top:6px">${mt.inc ? `${Math.round(usedPct)}% of this month's income spent` : 'No income logged yet this month'}</div></div>
+  const usedPct = mt.inc ? Math.min(100, (mt.out / mt.inc) * 100) : (mt.out ? 100 : 0);
+  const whole = money(w.net).replace(/\.\d\d$/, ''), cents = money(w.net).slice(-3);
+  const nm = String(S.user?.user_metadata?.own_names || '').split(',')[0].trim().split(' ')[0] || 'Blu';
+  const accs = activeAccounts().slice().sort((x, y) => (b[y.id] * (rate(y.currency) ?? 0)) - (b[x.id] * (rate(x.currency) ?? 0)));
+  return `<div class="hello"><img class="mark" src="brand/scry-icon.svg" alt=""><div><div class="hi">${hello}</div><div class="nm">${esc(nm)}</div></div><span class="grow"></span>${tagChips()}</div>`
+  + (isDemo() && !S.settings.hideBanner ? `<div class="demo-banner" role="note"><span><b>You're looking at demo data.</b> Every number and notification here is a made-up sample, stored only in this browser.</span><button data-a="hideBanner" aria-label="Hide this note">${IC('x', 'sm')}</button></div>` : '')
+  + `<div class="home-grid"><div class="home-col">
+    <section class="card hero balance"><div class="k">Total balance</div>
+      <div class="v ${w.net < 0 ? 'neg' : ''}">${whole}<small>${cents}</small></div>
+      ${w.owe < 0 ? `<span class="chip owe">${IC('trending-down', 'sm')} You owe ${money(-w.owe)}</span>` : `<span class="chip">${IC('shield-check', 'sm')} Nothing owed</span>`}
+      ${w.missing.length ? `<span class="chip owe" style="margin-left:6px">${w.missing.join(', ')} rate not set</span>` : ''}
+      ${sparkline(worthSeries(30))}
+    </section>
+    <div class="quick">
+      <button data-a="addTx"><span class="b gold">${IC('plus', 'lg')}</span>Add</button>
+      <button data-a="addTransfer"><span class="b">${IC('arrow-left-right')}</span>Transfer</button>
+      <a href="#bills"><span class="b">${IC('receipt')}</span>Pay bill</a>
+      <a href="#penny"><span class="b" style="color:var(--gold-1)">${IC('sparkles')}</span>Penny</a>
+    </div>
+    ${tray(4)}
+    <div class="sechead"><b>Accounts</b><a href="#accounts">See all</a></div>
+    <div class="acc-strip">${accs.map(a => `<div class="acc-tile" data-a="openAccount" data-id="${a.id}" role="button" tabindex="0"><div class="lg">${accIcon(a, 36)}</div><div class="t">${esc(a.name)}</div><div class="m ${b[a.id] < 0 ? 'neg' : ''}">${money(b[a.id], a.currency).replace(/\.00$/, '')}</div></div>`).join('') || '<div class="empty">No accounts yet. <a href="#" data-a="addAccount">Add your first</a></div>'}</div>
+    <div class="sechead"><b>Coming up</b><a href="#bills">All bills</a></div>
+    <section class="card"><div class="list">${up.length ? up.slice(0, 4).map(o => billRow(o)).join('') : '<div class="empty">Nothing due in the next two weeks.</div>'}</div></section>
   </div>
-  <div class="grid g2 mb">
-    <section class="card"><h2>Bills · next 14 days <small>${money(up.reduce((s, o) => s + num(o.bill.amount), 0))}</small></h2>
-      <div class="list">${up.length ? up.slice(0, 5).map(o => billRow(o)).join('') : '<div class="empty">Nothing due in the next two weeks.</div>'}</div>
-      ${up.length > 5 ? `<div class="xs" style="margin-top:6px"><a href="#bills">All ${up.length} upcoming</a></div>` : ''}</section>
+  <div class="home-col">
+    <section class="card"><h2>${mon} so far <small><a href="#tx">Activity</a></small></h2>
+      <div class="trio"><div><div class="xs faint">In</div><div class="mid pos">${money(mt.inc)}</div></div><div><div class="xs faint">Out</div><div class="mid">${money(mt.out)}</div></div><div><div class="xs faint">Left</div><div class="mid ${mt.left < 0 ? 'neg' : ''}">${money(mt.left)}</div></div></div>
+      <div class="bar" style="margin-top:14px" aria-label="${Math.round(usedPct)}% of income spent"><i class="${usedPct > 95 ? 'over' : usedPct > 80 ? 'warn' : ''}" style="width:${usedPct}%"></i></div>
+      <div class="xs faint" style="margin-top:6px">${mt.inc ? `${Math.round(usedPct)}% of this month's income spent` : 'No income logged yet this month'}</div></section>
+    <section class="card penny-strip"><span class="penny-dot lg" aria-hidden="true">${IC('sparkles')}</span><div class="grow"><b>Ask Penny</b><div class="xs muted">Your AI accountant. Money questions only.</div></div>
+      <div class="catpick">${PENNY_STARTERS.slice(0, 3).map(q => `<button data-a="pennyAsk" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div></section>
     <section class="card"><h2>Budgets <small><a href="#budget">See all</a></small></h2>
       ${budRows.length ? budRows.map(r => { const p = r.sp / r.bud; return `<div class="meter"><div class="row"><span>${catIcon(r.c)} ${esc(r.c.name)}</span><span class="grow"></span><span class="mono xs ${p > 1 ? 'neg' : 'muted'}">${money(r.sp)} / ${money(r.bud)}</span></div><div class="bar"><i class="${p > 1 ? 'over' : p > .8 ? 'warn' : ''}" style="width:${Math.min(100, p * 100)}%"></i></div></div>`; }).join('') : '<div class="empty">No budgets yet. <a href="#budget">Set some</a></div>'}</section>
     <section class="card"><h2>Recent activity <small><a href="#tx">See all</a></small></h2><div class="list">${recent.map(txRow).join('') || '<div class="empty">Nothing yet. Tap + to add.</div>'}</div></section>
-    <section class="card"><h2>Accounts <small><a href="#accounts">Manage</a></small></h2><div class="list">
-      ${activeAccounts().map(a => `<div class="item click" data-a="openAccount" data-id="${a.id}" role="button" tabindex="0"><div class="ico">${accIcon(a)}</div><div class="main"><div class="t">${esc(a.name)}</div><div class="s">${ACCOUNT_TYPES[a.type]?.[0] || ''}${a.bank && BANKS[a.bank] ? ' · auto-detect on' : ''}</div></div><div class="amt ${b[a.id] < 0 ? 'neg' : ''}">${money(b[a.id], a.currency)}</div></div>`).join('') || '<div class="empty">No accounts yet. <a href="#" data-a="addAccount">Add your first</a></div>'}</div></section>
-  </div>
-  <section class="card"><h2>Where the money went <small>${monthName(thisMonth())}</small></h2>
-    ${byCat.length ? `<div class="grid g2" style="gap:4px 28px">${byCat.map(([cid, v]) => { const c = cat(cid); return `<div class="meter"><div class="row"><span>${catIcon(c)} ${esc(c?.name || 'Uncategorised')}</span><span class="grow"></span><span class="mono xs muted">${money(v)}</span></div><div class="bar"><i class="blue" style="width:${(v / maxCat) * 100}%"></i></div></div>`; }).join('')}</div>` : '<div class="empty">No spending yet this month.</div>'}</section>`;
+    ${byCat.length ? `<section class="card"><h2>Where the money went <small>${monthName(thisMonth())}</small></h2>${byCat.map(([cid, v]) => { const c = cat(cid); return `<div class="meter"><div class="row"><span>${catIcon(c)} ${esc(c?.name || 'Uncategorised')}</span><span class="grow"></span><span class="mono xs muted">${money(v)}</span></div><div class="bar"><i class="blue" style="width:${(v / maxCat) * 100}%"></i></div></div>`; }).join('')}</section>` : ''}
+  </div></div>`;
+}
+// Net worth (PHP) at the end of each of the last N days, rebuilt backwards from today's balance.
+function worthSeries(days) {
+  const delta = {};
+  for (const t of S.d.transactions) {
+    const v = t.kind === 'income' ? toPHP(num(t.amount), t.account_id)
+      : t.kind === 'expense' ? -toPHP(num(t.amount), t.account_id)
+      : (t.to_account_id ? toPHP(t.to_amount != null ? num(t.to_amount) : num(t.amount), t.to_account_id) : 0) - toPHP(num(t.amount), t.account_id);
+    delta[t.date] = (delta[t.date] || 0) + v;
+  }
+  const out = []; let w = worth().net;
+  for (let i = 0; i < days; i++) { out.unshift(w); w -= delta[addDays(today(), -i)] || 0; }
+  return out;
+}
+function sparkline(pts) {
+  const W = 320, H = 54, min = Math.min(...pts), max = Math.max(...pts), span = max - min;
+  const y = v => span ? (H - 6 - ((v - min) / span) * (H - 14)).toFixed(1) : (H / 2).toFixed(1);
+  const d = pts.map((v, i) => `${i ? 'L' : 'M'}${((i / (pts.length - 1)) * W).toFixed(1)} ${y(v)}`).join(' ');
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-label="Balance over the last 30 days"><defs><linearGradient id="spk" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="${W}" y2="0"><stop offset="0" stop-color="#F2C57C"/><stop offset="1" stop-color="#3FE0C2"/></linearGradient><linearGradient id="spf" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3FE0C2" stop-opacity=".18"/><stop offset="1" stop-color="#3FE0C2" stop-opacity="0"/></linearGradient></defs><path d="${d} L${W} ${H} L0 ${H} Z" fill="url(#spf)" stroke="none"/><path d="${d}" fill="none" stroke="url(#spk)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/></svg>`;
 }
 
 function filteredTx() {
@@ -741,7 +774,8 @@ function vSettings() {
 let lastFocus = null;
 function modal(title, body, foot = '', wide = false) {
   lastFocus = document.activeElement;
-  $('#modal-root').innerHTML = `<div class="scrim" data-a="closeScrim"><div class="modal ${wide ? 'wide' : ''}" role="dialog" aria-modal="true" aria-label="${esc(title)}"><header><h2>${esc(title)}</h2><button data-a="close" aria-label="Close">×</button></header>${body}${foot ? `<footer>${foot}</footer>` : ''}</div></div>`;
+  $('#modal-root').innerHTML = `<div class="scrim" data-a="closeScrim"><div class="modal ${wide ? 'wide' : ''}" role="dialog" aria-modal="true" aria-label="${esc(title)}"><header><h2>${esc(title)}</h2><button data-a="close" aria-label="Close">${IC('x')}</button></header>${body}${foot ? `<footer>${foot}</footer>` : ''}</div></div>`;
+  drawIcons();
   setTimeout(() => ($('#modal-root [autofocus]') || $('#modal-root .modal button'))?.focus(), 30);
 }
 const closeModal = () => { if (!$('#modal-root').innerHTML) return; $('#modal-root').innerHTML = ''; lastFocus?.focus?.(); };
@@ -916,6 +950,7 @@ const A = {
   close: closeModal,
   closeScrim: (el, ev) => { if (ev.target === el) closeModal(); },
   addTx: () => activeAccounts().length ? txForm() : (toast('Add an account first'), accountForm()),
+  addTransfer: () => activeAccounts().length > 1 ? txForm({ kind: 'transfer' }) : toast('Add two accounts first'),
   editTx: el => txForm(S.d.transactions.find(t => t.id === el.dataset.id)),
   pickCat: el => { $('#txf').category_id.value = el.dataset.id; $('#guessHint').textContent = ''; syncTxForm(); },
   setDate: el => { $('#txf').date.value = addDays(today(), Number(el.dataset.v)); },
