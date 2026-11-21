@@ -747,6 +747,21 @@ details.orig div{margin-top:8px;padding:10px 12px;border-radius:14px;background:
 .bcard .art.mtop{-webkit-mask:linear-gradient(180deg,#000 85%,transparent);mask:linear-gradient(180deg,#000 85%,transparent)}
 .bcard .hd-gt{height:22px;width:auto}
 .cardgrid.wallet .bcard .hd-gt{height:15px}
+/* v21: bottom bar like Agila: labels, quiet active state, round + lifted out of the bar */
+@media (max-width:760px){
+  .tabbar{left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));height:66px;border-radius:999px;padding:0 6px;
+    grid-template-columns:1fr 1fr 80px 1fr 1fr;align-items:center;background:rgba(16,21,40,.9);border:1px solid rgba(255,255,255,.10);box-shadow:0 12px 34px rgba(0,0,0,.5);overflow:visible}
+  .tabbar a{font-size:11px;font-weight:600;gap:3px;height:auto;padding:6px 0;color:var(--faint);background:none!important;width:auto!important;margin:0!important;border-radius:0}
+  .tabbar a .ni{font-size:0;line-height:0}
+  .tabbar a .lc{width:22px;height:22px}
+  .tabbar a.on{color:var(--ink)}
+  .tabbar a.on .lc{stroke-width:2.4}
+  .tabbar a.on::after{display:none}
+  .tabbar .count{top:0;left:calc(50% + 6px)}
+  .tab-add{width:62px;height:62px;border-radius:999px;margin:0 auto;transform:translateY(-24px)!important;
+    box-shadow:0 0 0 7px #0A0F20,0 12px 26px rgba(232,163,61,.45)}
+  .tab-add .lc{width:26px;height:26px}
+}
 </style>
 </head>
 <body>
@@ -755,6 +770,6 @@ details.orig div{margin-top:8px;padding:10px 12px;border-radius:14px;background:
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
 <script src="config.js?v=3" onerror="void 0"></script>
-<script src="app.js?v=20"></script>
+<script src="app.js?v=21"></script>
 </body>
 </html>
