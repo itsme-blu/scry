@@ -218,13 +218,31 @@ function balances() {
   }
   return b;
 }
+// IOUs: debts and money people owe him are 'loan' accounts. They are not wallets.
+const isIOU = a => a?.type === 'loan';
 function worth() {
-  const b = balances(); let own = 0, owe = 0; const missing = new Set();
+  const b = balances(); let own = 0, owe = 0, owed = 0; const missing = new Set();
   for (const a of activeAccounts()) {
     const r = rate(a.currency); if (r == null) { if (Math.abs(b[a.id]) > 0.004) missing.add(a.currency); continue; }   // only flag a missing rate when that money matters
-    const v = b[a.id] * r; if (v >= 0) own += v; else owe += v;
+    const v = b[a.id] * r;
+    if (isIOU(a)) { if (v >= 0) owed += v; else owe += v; }
+    else if (v >= 0) own += v; else owe += v;
   }
-  return { own, owe, net: own + owe, missing: [...missing] };
+  return { own, owe, owed, net: own + owed + owe, missing: [...missing] };
+}
+// How many cards per row on a wide screen: as many as fit at a readable size, choosing the count that leaves the fewest gaps.
+function cardCols(n) {
+  const w = Math.min(window.innerWidth, 1520) - (window.innerWidth > 760 ? 320 : 40), max = Math.max(1, Math.min(n, Math.floor(w / 230)));
+  let best = max, gaps = 99;
+  for (let c = max; c >= Math.max(2, max - 1); c--) { const g = (c - n % c) % c; if (g < gaps) { gaps = g; best = c; } }   // never collapse to one huge card
+  return best;
+}
+function iouList(b) {
+  const ious = activeAccounts().filter(a => isIOU(a) && Math.abs(b[a.id]) > 0.004);
+  const row = a => { const v = b[a.id], nm = a.name.replace(/\s*\((?:i owe|owes me|owe[sd]? me|i owe him|i owe her)\)\s*$/i, '');
+    return `<button class="iou" data-a="cardMenu" data-id="${a.id}"><span class="av ${v < 0 ? 'out' : 'in'}">${esc((nm[0] || '?').toUpperCase())}</span><span class="main"><b>${esc(nm)}</b><small>${v < 0 ? 'You owe' : 'Owes you'}</small></span><span class="amt ${v < 0 ? 'neg' : 'pos'}">${money(Math.abs(v), a.currency)}</span>${IC('chevron-right', 'sm')}</button>`; };
+  const them = ious.filter(a => b[a.id] > 0), me = ious.filter(a => b[a.id] < 0);
+  return { count: ious.length, html: `${them.length ? `<div class="iou-h">Owed to you</div>${them.map(row).join('')}` : ''}${me.length ? `<div class="iou-h">You owe</div>${me.map(row).join('')}` : ''}` };
 }
 const ADJ = 'Balance adjustment';
 const isAdj = t => t.note === ADJ && !t.category_id;
@@ -932,7 +950,7 @@ function acctMenu(id, all = false) {
       <button class="ash-btn" data-a="matchAccount" data-id="${a.id}" aria-label="Match to your bank app">${IC('scale')}</button>
       <button class="ash-btn" data-a="editAccount" data-id="${a.id}" aria-label="Edit account">${IC('pencil')}</button></div>
     <div class="ash-head"><h2>${esc(a.name)}</h2><div class="cap">${esc(ACCOUNT_TYPES[a.type]?.[0] || a.type)} · ${esc(a.currency)}</div></div>
-    <div class="ash-bal"><div class="cap">Current balance</div><div class="v ${bal < 0 ? 'neg' : ''}">${money(bal, a.currency)}</div><div class="ash-match">${matchedLabel(a.id)}</div>${openAppBtn(a.bank)}</div>
+    <div class="ash-bal"><div class="cap">${isIOU(a) ? (bal < 0 ? 'You owe' : 'Owes you') : 'Current balance'}</div><div class="v ${bal < 0 && !isIOU(a) ? 'neg' : ''}">${money(isIOU(a) ? Math.abs(bal) : bal, a.currency)}</div><div class="ash-match">${matchedLabel(a.id)}</div>${openAppBtn(a.bank)}</div>
     ${a.type !== 'cash' ? `<section class="ash-qr" id="qrBox" data-id="${a.id}"><div class="ash-ch"><b class="cap">Receive money</b></div><div class="qr-body"><span class="spin sm"></span></div></section>` : ''}
     <section class="ash-card"><div class="ash-ch"><b class="cap">Transactions</b><span class="grow"></span><span class="xs">${txs.length}</span></div>
       ${shown.length ? shown.map(t => acctTxRow(t, a)).join('') : '<div class="ash-empty">Nothing here yet.</div>'}
@@ -1014,7 +1032,8 @@ function vHome() {
   const nm = String(S.user?.user_metadata?.own_names || '').split(',')[0].trim().split(' ')[0] || 'Blu';
   const hidden = !!S.settings.hideAmounts;
   const whole = hidden ? money(w.own) : money(w.own).replace(/\.\d\d$/, ''), cents = hidden ? '' : money(w.own).slice(-3);   // Total balance = money he has; debts shown below it
-  const accAll = activeAccounts().slice().sort((x, y) => (b[x.id] * (rate(x.currency) ?? 0)) - (b[y.id] * (rate(y.currency) ?? 0)));
+  const accAll = activeAccounts().filter(a => !isIOU(a)).sort((x, y) => (b[x.id] * (rate(x.currency) ?? 0)) - (b[y.id] * (rate(y.currency) ?? 0)));
+  const ious = iouList(b);
   const accs = accAll.some(a => Math.abs(b[a.id]) > 0.004) ? accAll.filter(a => Math.abs(b[a.id]) > 0.004) : accAll;   // smallest first, biggest in front
   const funded = it => it.accs.some(a => Math.abs(b[a.id]) > 0.004);
   const allItems = walletItems(accAll).sort((x, y) => itemValue(x, b) - itemValue(y, b));
@@ -1032,7 +1051,7 @@ function vHome() {
       <div class="bh"><span class="cap k">Total balance</span><span class="grow"></span>
         <button class="eye" data-a="toggleHide" aria-label="${hidden ? 'Show amounts' : 'Hide amounts'}" aria-pressed="${hidden}">${IC(hidden ? 'eye-off' : 'eye', 'sm')}</button></div>
       <div class="v">${whole}<small>${cents}</small></div>
-      <div class="bmeta">${w.owe < 0 ? `<span class="owe">${IC('trending-down', 'sm')} You owe ${money(-w.owe)}</span><span class="dot">·</span><span>Net worth ${money(w.net)}</span>` : `<span class="ok">${IC('shield-check', 'sm')} Nothing owed</span>`}${w.missing.length ? `<span class="dot">·</span><span>Excludes ${w.missing.join(', ')}</span><span class="dot">·</span><a href="#settings">set rate</a>` : ''}</div>
+      <div class="bmeta">${w.owe < 0 ? `<span class="owe">${IC('trending-down', 'sm')} You owe ${money(-w.owe)}</span>` : `<span class="ok">${IC('shield-check', 'sm')} Nothing owed</span>`}${w.owed > 0 ? `<span class="dot">·</span><span class="owed">Owed to you ${money(w.owed)}</span>` : ''}${w.owe < 0 || w.owed > 0 ? `<span class="dot">·</span><span>Net worth ${money(w.net)}</span>` : ''}${w.missing.length ? `<span class="dot">·</span><span>Excludes ${w.missing.join(', ')}</span><span class="dot">·</span><a href="#settings">set rate</a>` : ''}</div>
       <div class="bscope">${tagChips()}</div>
       <div class="hq only-desk"><button class="btn pri" data-a="addTx">${IC('plus', 'sm')} Add</button><button class="btn" data-a="scan">${IC('scan-line', 'sm')} Scan</button><button class="btn" data-a="addTransfer">${IC('arrow-left-right', 'sm')} Transfer</button><a class="btn" href="#bills">${IC('receipt', 'sm')} Pay bill</a></div>
     </section>
@@ -1051,7 +1070,8 @@ function vHome() {
       <a class="wlink" href="#accounts">${accAll.length} account${accAll.length === 1 ? '' : 's'} in your wallet ${IC('chevron-right', 'sm')}</a>
     </div>
     <div class="c12 only-desk"><div class="sechead"><b class="cap">Wallet</b><a href="#accounts">See all</a></div>
-      <div class="cardgrid">${homeItems.slice().reverse().map(it => walletCard(it, b)).join('')}</div></div>
+      <div class="cardgrid" style="grid-template-columns:repeat(${cardCols(homeItems.length)},minmax(0,1fr))">${homeItems.slice().reverse().map(it => walletCard(it, b)).join('')}</div></div>
+    ${ious.count ? `<section class="card iou-card c12" style="--o:4"><div class="sh"><b class="cap">IOUs</b><span class="grow"></span><span class="xs faint">Debts and money owed to you</span></div>${ious.html}</section>` : ''}
     ${quick.length ? `<div class="qcats c12" style="--o:4">${quick.map(c => `<button data-a="quickCat" data-id="${c.id}"><span>${IC(catLucide(c))}</span><b>${esc(c.name.split(/[ &]/)[0])}</b></button>`).join('')}</div>` : ''}
     <a class="rowlink c12" style="--o:6" href="#budget"><span><b>${nBud ? 'Budgets' : 'Set budgets'}</b>${nBud ? `<small>${nBud} set for ${monthName(thisMonth()).split(' ')[0]}</small>` : '<small>Give every peso a job</small>'}</span>${IC('chevron-right')}</a>
     <div class="${recent.length ? 'c6' : 'c12'}" style="--o:7"><section class="card"><div class="sh"><b class="cap">Upcoming</b><span class="grow"></span><a href="#bills" class="xs">All bills</a></div>
@@ -1166,14 +1186,16 @@ function calendar() {
 
 function vAccounts() {
   const b = balances(), w = worth();
-  const list = activeAccounts().slice().sort((x, y) => (b[y.id] * (rate(y.currency) ?? 0)) - (b[x.id] * (rate(x.currency) ?? 0)));
+  const list = activeAccounts().filter(a => !isIOU(a)).sort((x, y) => (b[y.id] * (rate(y.currency) ?? 0)) - (b[x.id] * (rate(x.currency) ?? 0)));
+  const ious = iouList(b);
   return ph('Wallet', 'Wallet', 'Tap a card to see its activity or match it to your bank app', '<button class="btn pri" data-a="addAccount">+ Add account</button>')
   + `<section class="card hero networth mb"><div class="bh"><span class="cap k">Net worth</span><span class="grow"></span><button class="eye" data-a="toggleHide" aria-label="Hide or show amounts">${IC(S.settings.hideAmounts ? 'eye-off' : 'eye', 'sm')}</button></div>
     <div class="v">${money(w.net)}</div>
-    <div class="nw2"><div><span>Assets</span><b>${money(w.own)}</b></div><div><span>Liabilities</span><b>${money(-w.owe)}</b></div></div>
+    <div class="nw2"><div><span>Money you have</span><b>${money(w.own)}</b></div><div><span>You owe</span><b>${money(-w.owe)}</b></div>${w.owed > 0 ? `<div><span>Owed to you</span><b>${money(w.owed)}</b></div>` : ''}</div>
     ${w.missing.length ? `<div class="fine">Not counted: ${w.missing.join(', ')} · <a href="#settings">set rate</a></div>` : ''}</section>
   <div class="cardgrid wallet">${walletItems(list).sort((x, y) => itemValue(y, b) - itemValue(x, b)).map(it => walletCard(it, b)).join('')}
-    <button class="bcard addcard" data-a="addAccount">${IC('plus', 'lg')}<span>Add account</span></button></div>`;
+    <button class="bcard addcard" data-a="addAccount">${IC('plus', 'lg')}<span>Add account</span></button></div>
+  ${ious.count ? `<section class="card iou-card" style="margin-top:var(--gap)"><div class="sh"><b class="cap">IOUs</b><span class="grow"></span><span class="xs faint">Debts and money owed to you</span></div>${ious.html}</section>` : ''}`;
 }
 
 function vSettings() {
