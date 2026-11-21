@@ -386,16 +386,20 @@ function guessCategory(note, kind) {
 }
 
 // ---------- notification reader ----------
+// A text whose sender is the bank itself ("GCash": "Your payment of P976.90 to Grab…") counts as that bank.
+const SMS_BANK = { gcash: /^\s*gcash\b/i, maribank: /^\s*mari\s?bank\b/i, gotyme: /^\s*go\s?tyme\b/i, wise: /^\s*wise\b/i };
+const smsBank = item => /messag|\bmms\b|\bsms\b/i.test(`${item.app || ''} ${item.package || ''}`)
+  ? (Object.entries(SMS_BANK).find(([, re]) => re.test(item.title || '')) || [])[0] || null : null;
 function bankOf(item) {
   const s = `${item.app || ''} ${item.package || ''}`;
   for (const [k, v] of Object.entries(BANKS)) if (v.re.test(s)) return k;
-  return null;
+  return smsBank(item);
 }
 // Texts (Google Messages / Samsung Messages) and Gmail carry bills and payment confirmations from billers.
 function sourceOf(item) {
   const s = `${item.app || ''} ${item.package || ''}`;
   if (/gmail|android\.gm\b/i.test(s)) return 'email';
-  if (/messag|\bmms\b|\bsms\b/i.test(s)) return 'sms';
+  if (/messag|\bmms\b|\bsms\b/i.test(s)) return smsBank(item) ? 'bank' : 'sms';
   return 'bank';
 }
 // Biller name from the sender ("PLDTHome" → PLDT) or the text ("for PLDT Account")
