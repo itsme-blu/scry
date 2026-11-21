@@ -353,7 +353,9 @@ function incomeRow(o, withLog = true) {
       if (pc === ac) return '+' + money(v, ac);
       return `${cv != null ? '+≈' + money(cv, ac) : '+' + money(v, pc)}<small class="inc-sub">${money(v, pc)}${num(i.hourly) ? ` · ${money(num(i.hourly), pc)}/hr × ${num(i.hours)}h` : ''}</small>`; })()}</div>${withLog ? `<button class="btn sm inc-log" data-a="logIncome" data-id="${i.id}" data-date="${o.date}" aria-label="Log ${esc(i.name)} pay">${IC('download', 'sm')} Log</button>` : ''}</div>`;
 }
-function incomeForm(i = {}) {
+function incomeForm(i0 = {}) {
+  // Dollar pay lands in Wise USD unless he picks another account.
+  const i = i0.account_id ? i0 : { ...i0, account_id: (activeAccounts().find(a => a.bank === 'wise' && a.currency === 'USD') || activeAccounts().find(a => a.bank === 'wise') || {}).id };
   modal(i.id ? 'Edit income' : 'Add income source', `<form class="form" id="incf" onsubmit="return false">
     <label class="f">Who pays you<input name="name" value="${esc(i.name || '')}" placeholder="e.g. GOOD Hoops, Intelocate" autofocus></label>
     <div class="two"><label class="f">Paid in<select name="pay_cur">${['PHP', 'USD', 'CAD', 'SGD', 'EUR', 'GBP', 'AUD'].map(c => `<option ${(i.pay_cur || curOf(i.account_id)) === c ? 'selected' : ''}>${c}</option>`).join('')}</select></label>
@@ -2063,6 +2065,7 @@ async function boot() {
     const { data: { session } } = await S.sb.auth.getSession();
     if (!session) return showLogin();
     S.user = session.user;
+    try { const { data } = await S.sb.auth.getUser(); if (data?.user) S.user = data.user; } catch { /* offline: keep the saved copy */ }   // fresh profile (paydays, names)
     S.sb.auth.onAuthStateChange(ev => { if (ev === 'SIGNED_OUT') showLogin(); });
   }
   try { await DB.load(); await seedIfEmpty(); await loadKeyStatus(); }
