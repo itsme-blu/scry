@@ -762,6 +762,23 @@ details.orig div{margin-top:8px;padding:10px 12px;border-radius:14px;background:
     box-shadow:0 0 0 7px #0A0F20,0 12px 26px rgba(232,163,61,.45)}
   .tab-add .lc{width:26px;height:26px}
 }
+/* v22: Blu's card images as the card faces */
+.bcard.photo{background:#111;border-radius:6.2%/10%;justify-content:flex-end;padding:0 6% 6.5%}
+.bcard.photo::before,.bcard.photo::after{display:none}
+.bcard.photo .art.pic{inset:0;width:100%;height:100%;object-fit:cover;transform:scale(1.015)}
+.bcard.photo .bot{position:relative;z-index:2;margin:0!important;align-self:flex-start}
+.bcard.photo .k{color:#fff;opacity:.9;text-shadow:0 1px 4px rgba(0,0,0,.45)}
+.bcard.photo .m{color:#fff;text-shadow:0 2px 8px rgba(0,0,0,.45)}
+.bcard.photo[data-brand="wise"] .k,.bcard.photo[data-brand="wise"] .m{color:#163300;text-shadow:none}
+.bcard.photo .ptag{position:absolute;z-index:2;top:7%;right:5%;font:800 11px var(--display);letter-spacing:.04em;padding:4px 9px;border-radius:999px;background:rgba(0,0,0,.35);color:#fff;backdrop-filter:blur(6px)}
+.bcard.photo[data-brand="wise"] .ptag{background:rgba(22,51,0,.14);color:#163300}
+.wstack .bcard.photo+.bcard.photo{margin-top:calc(-63.05% + 56px)}
+@media (max-width:760px){
+  .cardgrid.wallet .bcard.photo{padding:0 7% 6%}
+  .cardgrid.wallet .bcard.photo .k{font-size:8px;letter-spacing:.12em}
+  .cardgrid.wallet .bcard.photo .m{font-size:14px}
+  .cardgrid.wallet .bcard.photo .ptag{font-size:9px;padding:2px 7px}
+}
 </style>
 </head>
 <body>
@@ -770,6 +787,6 @@ details.orig div{margin-top:8px;padding:10px 12px;border-radius:14px;background:
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
 <script src="config.js?v=3" onerror="void 0"></script>
-<script src="app.js?v=21"></script>
+<script src="app.js?v=22"></script>
 </body>
 </html>

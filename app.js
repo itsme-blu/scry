@@ -619,7 +619,17 @@ const CARD_HEAD = {
   gcash: () => '<img class="hd-gc" src="brand/cards/gcash-icon-white.svg" alt=""><span class="nm">GCash</span>',
   wise: a => `<img class="hd-wise" src="brand/cards/wise-logo.svg" alt="Wise">${a.currency !== 'PHP' || /wise\s+\w+/i.test(a.name) ? `<span class="cur">${esc(a.currency)}</span>` : ''}`,
 };
+// Blu's own card images (Nov 21 2026). Each already shows the logo and chip, so only the balance goes on top.
+const CARD_PHOTO = { wise: 'wise', gotyme: 'gotyme', cash: 'cash', maribank: 'maribank', gcash: 'gcash' };
 function bankCard(a, bal, o = {}) {
+  const pb = a.bank || (a.type === 'cash' ? 'cash' : '');
+  if (CARD_PHOTO[pb]) {
+    const cur = o.cur || a.currency, id = o.id || a.id;
+    const tag = o.count ? `${o.count} accounts` : (a.bank === 'wise' && (a.currency !== 'PHP' || /wise\s+\w+/i.test(a.name)) ? a.currency : '');
+    return `<div class="bcard photo" data-brand="${pb}" data-a="cardMenu" data-id="${id}" role="button" tabindex="0" aria-label="${esc(o.count ? (BANKS[a.bank]?.name || a.name) : a.name)}, ${money(bal, cur)}">
+      <img class="art pic" src="brand/cards/${CARD_PHOTO[pb]}.jpg" alt="">${tag ? `<span class="ptag">${esc(tag)}</span>` : ''}
+      <div class="bot"><div class="k">${o.count ? 'Total' : 'Balance'}${o.note ? ` · ${esc(o.note)}` : ''}</div><div class="m ${bal < 0 ? 'neg' : ''}">${money(bal, cur)}</div></div></div>`;
+  }
   const brand = a.bank || (a.type === 'cash' ? 'cash' : a.type === 'credit' ? 'credit' : 'other');
   const art = CARD_ART[brand]?.() || '';
   let head = CARD_HEAD[brand] ? CARD_HEAD[brand](a) : `<span class="lg">${accIcon(a, 30)}</span><span class="nm">${esc(a.name)}</span>`;
