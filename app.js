@@ -1331,8 +1331,8 @@ function accountForm(a = {}) {
   </form>`, `${a.id ? `<button class="btn danger left" data-a="archiveAccount" data-id="${a.id}">Archive</button><button class="btn" data-a="matchAccount" data-id="${a.id}">Match balance</button>` : ''}<button class="btn ghost" data-a="close">Cancel</button><button class="btn pri" data-a="saveAccount" data-id="${a.id || ''}">Save account</button>`);
 }
 
-function billForm(b = {}) {
-  modal(b.id ? 'Edit bill' : 'Add bill', `<form class="form" id="billf" onsubmit="return false">
+function billForm(b = {}, inboxId = '') {
+  modal(b.id ? 'Edit bill' : 'Add bill', `<form class="form" id="billf" data-inbox="${esc(inboxId)}" onsubmit="return false">
     <label class="f">Name<input name="name" value="${esc(b.name || '')}" placeholder="e.g. Meralco, PLDT, Rent" autofocus></label>
     <div class="two"><label class="f">Amount (₱)<input name="amount" inputmode="decimal" value="${b.amount != null ? num(b.amount).toFixed(2) : ''}"></label>
       <label class="f">Next due date<input type="date" name="due_date" value="${b.due_date || today()}"></label></div>
@@ -1342,7 +1342,7 @@ function billForm(b = {}) {
     <label class="f">Note<input name="note" value="${esc(b.note || '')}"></label>
     <label class="row small muted" style="gap:8px"><input type="checkbox" name="autopay" ${b.autopay ? 'checked' : ''}> Auto-pay (charged automatically)</label>
     ${segTag(b.tag || 'personal')}
-  </form>`, `${b.id ? `<button class="btn danger left" data-a="delBill" data-id="${b.id}">Delete</button>` : ''}<button class="btn ghost" data-a="close">Cancel</button><button class="btn pri" data-a="saveBill" data-id="${b.id || ''}">Save bill</button>`);
+  </form>`, `${inboxId ? `<button class="btn ghost left" data-a="ignoreInbox" data-id="${esc(inboxId)}">Dismiss</button>` : b.id ? `<button class="btn danger left" data-a="delBill" data-id="${b.id}">Delete</button>` : ''}<button class="btn ghost" data-a="close">Cancel</button><button class="btn pri" data-a="saveBill" data-id="${b.id || ''}">Save bill</button>`);
 }
 
 function payForm(b, date) {
@@ -1689,7 +1689,7 @@ const A = {
   scanAll: el => { const on = el.checked; document.querySelectorAll('#scanLines input[data-i]').forEach(c => { c.checked = on; }); },
   editBill: el => billForm(S.d.bills.find(b => b.id === el.dataset.id)),
   async saveBill(el) {
-    const fromInbox = S.pendingInboxBill; S.pendingInboxBill = null;
+    const fromInbox = $('#billf')?.dataset.inbox || '';
     if (fromInbox) setTimeout(() => safe(() => DB.update('inbox', fromInbox, { status: 'done' })).then(render), 0);
     const v = form('#billf'); if (!v.name.trim()) return toast('Give the bill a name');
     const row = { name: v.name.trim(), amount: amt(v.amount), due_date: v.due_date, repeat: v.repeat, category_id: v.category_id || null, account_id: v.account_id || null, note: v.note || null, autopay: !!v.autopay, tag: segVal('tag') || 'personal', active: true };
@@ -1730,9 +1730,8 @@ const A = {
     const it0 = S.d.inbox.find(i => i.id === el.dataset.id);
     if (it0 && sourceOf(it0) !== 'bank') {
       const { p, bill } = inboxCheck(it0), raw = [it0.title, it0.body].filter(Boolean).join(' · '), date = iso(new Date(it0.received_at));
-      if (p.kind === 'billdue') {
-        S.pendingInboxBill = it0.id;
-        return billForm(bill ? { ...bill, amount: p.amount ?? bill.amount, due_date: p.due || bill.due_date } : { name: p.party || 'Bill', amount: p.amount, due_date: p.due || today(), repeat: 'monthly', category_id: guessCategory(p.party || '', 'expense') || catByName('Phone & internet') || null });
+      if (p.kind === 'billdue' || !p.ok) {
+        return billForm(bill ? { ...bill, amount: p.amount ?? bill.amount, due_date: p.due || bill.due_date } : { name: p.party || 'Bill', amount: p.amount, due_date: p.due || today(), repeat: 'monthly', category_id: guessCategory(p.party || '', 'expense') || catByName('Phone & internet') || null }, it0.id);
       }
       const note = p.party ? `${p.party} bill` : (it0.title || 'Bill payment');
       return txForm({ kind: 'expense', amount: p.amount, date, note, category_id: bill?.category_id || guessCategory(p.party || note, 'expense') || (/pldt|globe|smart|converge|dito|sky/i.test(p.party || '') ? catByName('Phone & internet') : /meralco|maynilad|water/i.test(p.party || '') ? catByName('Utilities') : null), tag: bill?.tag || 'personal' }, { inboxId: it0.id, raw });

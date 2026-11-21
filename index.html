@@ -508,7 +508,6 @@ details.orig div{margin-top:8px;padding:10px 12px;border-radius:14px;background:
 }
 @media (max-width:760px){
   .balance{padding:20px}
-  .rbtn.hov{display:none}
   .card{padding:16px}
   .tray{padding:16px 16px 4px}
   .rvr{gap:10px;padding:12px 0}
@@ -980,6 +979,8 @@ body[data-view="penny"] .mhead .brand{visibility:hidden}
 .iou .lc{color:var(--faint)}
 .balance.lux .bmeta .owed{color:#9FE6C8}
 .nw2:has(> div:nth-child(3)){grid-template-columns:1fr 1fr 1fr}
+/* v37: the dismiss ✕ is always visible on touch screens */
+@media (hover:none),(pointer:coarse){ .rbtn.hov{opacity:1} }
 </style>
 </head>
 <body>
@@ -988,6 +989,6 @@ body[data-view="penny"] .mhead .brand{visibility:hidden}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
 <script src="config.js?v=3" onerror="void 0"></script>
-<script src="app.js?v=36"></script>
+<script src="app.js?v=37"></script>
 </body>
 </html>
