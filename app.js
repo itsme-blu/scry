@@ -330,22 +330,32 @@ function upcomingIncome(days) {
   }
   return out.sort((a, b) => a.date.localeCompare(b.date));
 }
-const incomePerMonth = () => incomes().reduce((s, i) => s + num(i.amount) * ({ weekly: 52 / 12, biweekly: 26 / 12, semimonthly: 2, monthly: 1 }[i.every] || 0) * (rate(curOf(i.account_id)) ?? 0), 0);
+// Pay can be in another currency than the account it lands in (Intelocate pays US$ by the hour into Wise).
+const incCur = i => i.pay_cur || curOf(i.account_id);
+const incAmt = i => num(i.hourly) && num(i.hours) ? num(i.hourly) * num(i.hours) : num(i.amount);
+const incInAcc = i => { const v = incAmt(i), pc = incCur(i), ac = curOf(i.account_id); if (pc === ac) return v; const r1 = rate(pc), r2 = rate(ac); return r1 && r2 ? Math.round(v * r1 / r2 * 100) / 100 : null; };
+const incomePerMonth = () => incomes().reduce((s, i) => s + incAmt(i) * ({ weekly: 52 / 12, biweekly: 26 / 12, semimonthly: 2, monthly: 1 }[i.every] || 0) * (rate(incCur(i)) ?? 0), 0);
 function incomeRow(o, withLog = true) {
   const i = o.inc, a = acc(i.account_id), dd = daysBetween(today(), o.date);
   const when = o.late ? `<span class="badge warn">${-dd === 1 ? '1 day ago' : -dd + ' days ago'}</span>` : dd === 0 ? '<span class="badge ok">Today</span>' : dd === 1 ? '<span class="badge ok">Tomorrow</span>' : '';
   return `<div class="item click inc-row" data-a="editIncome" data-id="${i.id}" role="button" tabindex="0">${dateBox(o.date, false)}
     <div class="main"><div class="t">${esc(i.name)}${dbBadge(i.tag)}</div><div class="s">${esc(INCOME_REPEAT[i.every] || '')}${a ? ' · into ' + esc(a.name) : ''}</div></div>
-    ${when}<div class="amt pos">${num(i.amount) ? '+' + money(num(i.amount), a?.currency || 'PHP') : 'Varies'}</div>${withLog ? `<button class="btn sm inc-log" data-a="logIncome" data-id="${i.id}" data-date="${o.date}" aria-label="Log ${esc(i.name)} pay">${IC('download', 'sm')} Log</button>` : ''}</div>`;
+    ${when}<div class="amt pos">${(() => { const v = incAmt(i), pc = incCur(i), ac = a?.currency || 'PHP', cv = incInAcc(i);
+      if (!v) return 'Varies';
+      if (pc === ac) return '+' + money(v, ac);
+      return `${cv != null ? '+≈' + money(cv, ac) : '+' + money(v, pc)}<small class="inc-sub">${money(v, pc)}${num(i.hourly) ? ` · ${money(num(i.hourly), pc)}/hr × ${num(i.hours)}h` : ''}</small>`; })()}</div>${withLog ? `<button class="btn sm inc-log" data-a="logIncome" data-id="${i.id}" data-date="${o.date}" aria-label="Log ${esc(i.name)} pay">${IC('download', 'sm')} Log</button>` : ''}</div>`;
 }
 function incomeForm(i = {}) {
   modal(i.id ? 'Edit income' : 'Add income source', `<form class="form" id="incf" onsubmit="return false">
     <label class="f">Who pays you<input name="name" value="${esc(i.name || '')}" placeholder="e.g. GOOD Hoops, Intelocate" autofocus></label>
-    <div class="two"><label class="f">Usual amount<input name="amount" inputmode="decimal" value="${i.amount ? num(i.amount).toFixed(2) : ''}" placeholder="Leave blank if it varies"></label>
+    <div class="two"><label class="f">Paid in<select name="pay_cur">${['PHP', 'USD', 'CAD', 'SGD', 'EUR', 'GBP', 'AUD'].map(c => `<option ${(i.pay_cur || curOf(i.account_id)) === c ? 'selected' : ''}>${c}</option>`).join('')}</select></label>
       <label class="f">Lands in<select name="account_id">${accOptions(i.account_id)}</select></label></div>
+    <div class="two"><label class="f">Hourly rate<input name="hourly" inputmode="decimal" value="${i.hourly ? num(i.hourly) : ''}" placeholder="If paid by the hour"></label>
+      <label class="f">Hours each payday<input name="hours" inputmode="decimal" value="${i.hours ? num(i.hours) : ''}" placeholder="e.g. 80"></label></div>
+    <label class="f">Or a set amount each payday<input name="amount" inputmode="decimal" value="${!num(i.hourly) && i.amount ? num(i.amount).toFixed(2) : ''}" placeholder="Leave blank if it varies"></label>
     <div class="two"><label class="f">How often<select name="every">${Object.entries(INCOME_REPEAT).map(([k, l]) => `<option value="${k}" ${(i.every || 'biweekly') === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       <label class="f">Next payday<input type="date" name="next" value="${i.next || today()}"></label></div>
-    <div class="hint">The amount is in the currency of the account it lands in.</div>
+    <div class="hint">Paid in dollars? Scry shows it in pesos at your USD rate (Settings), so the peso figure moves with the rate. When you log the pay, type what actually arrived.</div>
     ${segTag(i.tag || 'personal')}
   </form>`, `${i.id ? `<button class="btn danger left" data-a="delIncome" data-id="${i.id}">Delete</button>` : ''}<button class="btn ghost" data-a="close">Cancel</button><button class="btn pri" data-a="saveIncome" data-id="${i.id || ''}">Save</button>`);
 }
@@ -434,7 +444,9 @@ function parseNotif(item) {
   return { amount, currency, kind, party: cashback ? 'Cashback' : (pm ? pm[1].trim() : null), cashback, fee: fee > 0 && amount && fee < amount ? fee : 0, ref: rm ? rm[1] : null, ok: amount != null && kind != null };
 }
 function possibleDuplicate(accountId, amount, date) {
-  return S.d.transactions.find(t => t.account_id === accountId && Math.abs(num(t.amount) - amount) < 0.005 && Math.abs(daysBetween(t.date, date)) <= 2);
+  const near = S.d.transactions.filter(t => t.account_id === accountId && Math.abs(daysBetween(t.date, date)) <= 2);
+  return near.find(t => Math.abs(num(t.amount) - amount) < 0.005)
+    || near.find(t => t.bill_id && near.some(f => f !== t && f.note === `${t.note} fee` && Math.abs(num(t.amount) + num(f.amount) - amount) < 0.005));
 }
 const newInbox = () => S.d.inbox.filter(i => i.status === 'new').sort((a, b) => b.received_at.localeCompare(a.received_at));
 // Same bank AND same currency first (Wise has PHP/USD/CAD accounts), then any account of that bank.
@@ -1207,7 +1219,8 @@ function vBills() {
   const incCard = `<section class="card mb inc-card"><h2>Income coming in <small><button class="btn sm" data-a="addIncome">${IC('plus', 'sm')} Add income</button></small></h2>
     ${srcs.length ? `<div class="list">${inc.slice(0, 6).map(o => incomeRow(o, o.first)).join('') || '<div class="empty1">No paydays in the next 45 days.</div>'}</div>
       <div class="xs faint" style="margin-top:8px">About ${money(incomePerMonth())} a month from ${srcs.length} source${srcs.length === 1 ? '' : 's'}${srcs.some(x => !num(x.amount)) ? ' (sources marked "Varies" not counted)' : ''}</div>`
-      : '<div class="empty1">Add GOOD Hoops, Intelocate and any other pay so Scry knows when money is coming in.</div>'}</section>`;
+      : '<div class="empty1">Add GOOD Hoops, Intelocate and any other pay so Scry knows when money is coming in.</div>'}
+    ${srcs.some(x => /intelocate|summit/i.test(x.name)) ? '' : `<button class="inc-suggest" data-a="suggestIntelocate">${IC('sparkles', 'sm')}<span><b>Add your Intelocate pay</b><small>US$6/hr · 80 hrs every 2 weeks · into Wise · next Dec 5</small></span>${IC('chevron-right', 'sm')}</button>`}</section>`;
   const ub = unpaidBills(balances());
   return head + (ub.count ? `<div class="mb">${ub.card}</div>` : '') + incCard + `<section class="card">${group('Overdue', late)}${group('Next 7 days', soon)}${group('Later', later)}${all.length ? '' : '<div class="empty">No bills yet. Add rent, Meralco, internet, subscriptions…</div>'}</section>
     ${paused.length ? `<section class="card" style="margin-top:var(--gap)"><h2>Paid one-offs & paused</h2><div class="list">${paused.map(b => billRow({ bill: b, date: b.due_date }, false)).join('')}</div></section>` : ''}`;
@@ -1377,15 +1390,45 @@ function payForm(b, date) {
   const amt0 = cur === 'PHP' || !r ? num(b.amount) : num(b.amount) / r;
   // Open the bank or e-wallet app to actually pay; then come back and log it here.
   const apps = [...new Set(activeAccounts().filter(a => a.bank && BANK_APP[a.bank]).map(a => a.bank))].filter(k => bankAppLink(k));
-  const payApps = apps.length ? `<div class="payapps"><div class="lbl">1. Pay in your app</div><div class="pa-row">${apps.map(k => { const h = bankAppLink(k);
-    return `<a class="pa" href="${esc(h)}" ${h.startsWith('http') ? 'target="_blank" rel="noopener"' : ''}><img src="${BANK_LOGO[k]}" alt="">${esc(BANK_APP[k].name)}</a>`; }).join('')}</div>
-    <div class="lbl" style="margin-top:14px">2. Then log what you paid</div></div>` : '';
-  modal('Pay ' + b.name, `<form class="form" id="payf" onsubmit="return false">
+  const payApps = apps.length ? `<div class="payapps"><div class="lbl">Pay in your app</div><div class="pa-row">${apps.map(k => { const h = bankAppLink(k);
+    return `<a class="pa" data-bank="${k}" href="${esc(h)}" ${h.startsWith('http') ? 'target="_blank" rel="noopener"' : ''}><img src="${BANK_LOGO[k]}" alt="">${esc(BANK_APP[k].name)}</a>`; }).join('')}</div>
+    <div class="xs faint" style="margin-top:8px">When you come back to Scry, it asks if the payment went through and logs it for you. Already paid? Log it below.</div></div>` : '';
+  modal('Pay ' + b.name, `<form class="form" id="payf" data-bill="${b.id}" data-due="${date}" onsubmit="return false">
     ${payApps}
     ${amountField('amount', amt0, cur)}
-    <div class="two"><label class="f">Paid from<select name="account_id">${accOptions(accId)}</select></label><label class="f">Date paid<input type="date" name="date" value="${today()}"></label></div>
+    <div class="two"><label class="f">Fee<input name="fee" inputmode="decimal" placeholder="0.00"></label><label class="f">Paid from<select name="account_id">${accOptions(accId)}</select></label></div>
+    <label class="f">Date paid<input type="date" name="date" value="${today()}"></label>
     <div class="callout">${b.repeat === 'none' ? 'This one-off bill will be marked paid.' : `Next due date moves to <b>${shortDate(nextDate(date, b.repeat))}</b>.`}${b.note ? `<div class="xs faint" style="margin-top:6px">${esc(b.note)}</div>` : ''}</div>
   </form>`, `<button class="btn ghost" data-a="close">Cancel</button><button class="btn pri" data-a="confirmPay" data-id="${b.id}" data-date="${date}">Log payment</button>`);
+}
+
+// Tapping a bank button remembers the bill. Back in Scry, one question: did it go through? Yes logs it.
+const PAYING = 'scry-paying';
+document.addEventListener('click', ev => {
+  const a = ev.target.closest('a.pa[data-bank]'), f = $('#payf'); if (!a || !f) return;
+  const ac = activeAccounts().find(x => x.bank === a.dataset.bank && x.currency === 'PHP') || activeAccounts().find(x => x.bank === a.dataset.bank);
+  const same = !ac || curOf(ac.id) === curOf(f.account_id.value);   // typed amounts only carry over in the same currency
+  LS.set(PAYING, { bill: f.dataset.bill, due: f.dataset.due, account_id: ac?.id || f.account_id.value, amount: same ? amt(f.amount.value) || null : null, fee: same ? amt(f.fee?.value) || 0 : 0, at: Date.now() });
+}, true);
+function checkPaying() {
+  const p = LS.get(PAYING, null); if (!p || !S.mode) return;
+  const age = Date.now() - p.at;
+  if (age > 6 * 3600e3) return LS.del(PAYING);
+  if (age < 2500) return;                                         // still on the way out to the app
+  const b = S.d.bills.find(x => x.id === p.bill);
+  if (!b || !b.active || (b.last_paid && b.last_paid >= iso(new Date(p.at)))) return LS.del(PAYING);
+  const open = $('#modal-root').innerHTML; if (open && !$('#payf')) return;   // something else is open: ask next time
+  LS.del(PAYING); paidPrompt(b, p);
+}
+function paidPrompt(b, p) {
+  const a = acc(p.account_id), cur = curOf(p.account_id), r = rate(cur);
+  const amt0 = p.amount ?? (cur === 'PHP' || !r ? num(b.amount) : num(b.amount) / r);
+  modal(`Did you pay ${b.name}?`, `<form class="form" id="payf" data-bill="${b.id}" data-due="${p.due}" onsubmit="return false">
+    <div class="paid-q">${a?.bank && BANK_LOGO[a.bank] ? `<img src="${BANK_LOGO[a.bank]}" alt="">` : IC('receipt')}<div>You opened <b>${esc(BANK_APP[a?.bank]?.name || 'your app')}</b> to pay this. If it went through, check the amount and log it. Add the fee if the app charged one.</div></div>
+    ${amountField('amount', amt0, cur)}
+    <div class="two"><label class="f">Fee<input name="fee" inputmode="decimal" value="${p.fee ? p.fee.toFixed(2) : ''}" placeholder="0.00"></label><label class="f">Paid from<select name="account_id">${accOptions(p.account_id)}</select></label></div>
+    <input type="hidden" name="date" value="${today()}">
+  </form>`, `<button class="btn ghost" data-a="close">Not paid</button><button class="btn pri" data-a="confirmPay" data-id="${b.id}" data-date="${p.due}">Yes, log it</button>`);
 }
 
 function catForm(c = {}) {
@@ -1682,10 +1725,15 @@ const A = {
   async archiveAccount(el) { if (!confirm('Archive this account? Its history stays.')) return; await safe(() => DB.update('accounts', el.dataset.id, { archived: true })); closeModal(); render(); },
   addBill: () => billForm(),
   addIncome: () => activeAccounts().length ? incomeForm() : (toast('Add an account first'), accountForm()),
+  suggestIntelocate: () => {
+    const wise = activeAccounts().find(a => a.bank === 'wise' && a.currency === 'PHP') || activeAccounts().find(a => a.bank === 'wise');
+    incomeForm({ name: 'Intelocate (Summit Stride)', pay_cur: 'USD', hourly: 6, hours: 80, account_id: wise?.id, every: 'biweekly', next: '2026-12-05', tag: 'personal' });
+  },
   editIncome: el => incomeForm(incomes().find(x => x.id === el.dataset.id)),
   async saveIncome(el) {
     const v = form('#incf'); if (!v.name.trim()) return toast('Who pays you?');
-    const row = { id: el.dataset.id || Math.random().toString(36).slice(2, 10), name: v.name.trim(), amount: amt(v.amount) || 0, account_id: v.account_id, every: v.every, next: v.next || today(), tag: segVal('tag') || 'personal' };
+    const hourly = amt(v.hourly) || 0, hours = amt(v.hours) || 0;
+    const row = { id: el.dataset.id || Math.random().toString(36).slice(2, 10), name: v.name.trim(), amount: hourly && hours ? Math.round(hourly * hours * 100) / 100 : (amt(v.amount) || 0), pay_cur: v.pay_cur || curOf(v.account_id), hourly, hours, account_id: v.account_id, every: v.every, next: v.next || today(), tag: segVal('tag') || 'personal' };
     const list = incomes().filter(x => x.id !== row.id).concat(row);
     await safe(() => saveIncomes(list)); closeModal(); render(); toast('Saved');
   },
@@ -1693,7 +1741,7 @@ const A = {
   logIncome: el => {
     const i = incomes().find(x => x.id === el.dataset.id); if (!i) return;
     const c = catsOf('income').find(c => /salary|pay|wage|freelance|work/i.test(c.name)) || catsOf('income')[0];
-    txForm({ kind: 'income', amount: num(i.amount) || null, account_id: i.account_id, date: el.dataset.date <= today() ? el.dataset.date : today(), note: i.name, category_id: c?.id, tag: i.tag || 'personal' }, { incomeId: i.id });
+    txForm({ kind: 'income', amount: incInAcc(i) || null, account_id: i.account_id, date: el.dataset.date <= today() ? el.dataset.date : today(), note: i.name, category_id: c?.id, tag: i.tag || 'personal' }, { incomeId: i.id });
   },
   toggleHide: () => { S.settings.hideAmounts = !S.settings.hideAmounts; saveSettings(); render(); },
   quickCat: el => { if (!activeAccounts().length) return (toast('Add an account first'), accountForm()); txForm({ kind: 'expense', category_id: el.dataset.id }); },
@@ -1732,10 +1780,15 @@ const A = {
   async delBill(el) { if (!confirm('Delete this bill? Past payments stay in your transactions.')) return; await safe(() => DB.remove('bills', el.dataset.id)); closeModal(); render(); },
   payBill: el => { if (!activeAccounts().length) return toast('Add an account first'); payForm(S.d.bills.find(b => b.id === el.dataset.id), el.dataset.date); },
   async confirmPay(el) {
-    const b = S.d.bills.find(x => x.id === el.dataset.id), v = form('#payf'), amount = amt(v.amount);
+    const b = S.d.bills.find(x => x.id === el.dataset.id), v = form('#payf'), amount = amt(v.amount), fee = amt(v.fee || '') || 0;
     if (!(amount > 0)) return toast('Enter an amount');
+    LS.del(PAYING);
     await safe(async () => {
-      await DB.insert('transactions', { kind: 'expense', amount, date: v.date, account_id: v.account_id, category_id: b.category_id, note: b.name, tag: b.tag, bill_id: b.id });
+      const [t] = await DB.insert('transactions', { kind: 'expense', amount, date: v.date, account_id: v.account_id, category_id: b.category_id, note: b.name, tag: b.tag, bill_id: b.id });
+      if (fee > 0) await DB.insert('transactions', { kind: 'expense', amount: fee, date: v.date, account_id: v.account_id, category_id: await catFor('expense', 'Fees', '🧾'), note: `${b.name} fee`, tag: b.tag });
+      // The bank's own notification for this payment may already be waiting in To review: close it so it isn't logged twice.
+      const it = newInbox().find(i => { const c = inboxCheck(i); return c.a?.id === v.account_id && c.p.kind === 'expense' && c.p.amount != null && Math.abs(c.p.amount - (amount + fee)) < 0.005 && Math.abs(daysBetween(c.date, v.date)) <= 2; });
+      if (it && t) await DB.update('inbox', it.id, { status: 'done', transaction_id: t.id });
       const nd = nextDate(el.dataset.date, b.repeat);
       await DB.update('bills', b.id, nd ? { due_date: nd, last_paid: v.date } : { active: false, last_paid: v.date });
     });
@@ -1969,7 +2022,7 @@ async function boot() {
   }
   try { await DB.load(); await seedIfEmpty(); await loadKeyStatus(); }
   catch (e) { console.error(e); return gate(`<p class="warn">Could not load your data: ${esc(e.message || e)}</p><p class="xs muted">If this is a new project, run schema.sql in the Supabase SQL editor first.</p><button class="btn" data-a="disconnect">Back</button>`); }
-  render();
+  render(); checkPaying();
   if (!isDemo()) setInterval(async () => {
     if (document.hidden || $('#modal-root').innerHTML) return;
     try { const before = newInbox().length; S.d.inbox = await fetchAll('inbox'); if (newInbox().length !== before) render(); } catch { /* offline */ }
@@ -1989,7 +2042,7 @@ async function checkForUpdate() {
     }
   } catch { /* offline or blocked: keep running the current version */ }
 }
-document.addEventListener('visibilitychange', () => { if (!document.hidden) checkForUpdate(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { checkForUpdate(); setTimeout(checkPaying, 400); } });
 checkForUpdate();
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => { /* still works without it */ });
 boot();

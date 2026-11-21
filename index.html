@@ -986,6 +986,12 @@ body[data-view="penny"] .mhead .brand{visibility:hidden}
 .payapps .pa{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:14px;background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--ink);text-decoration:none;font-weight:600;font-size:14px}
 .payapps .pa img{width:26px;height:26px;border-radius:8px;background:#fff;object-fit:contain}
 .payapps .pa:active{transform:scale(.97)}
+/* v41: pay-in-app follow-up, USD pay */
+.paid-q{display:flex;gap:12px;align-items:center;padding:12px;border-radius:14px;background:rgba(255,255,255,.05);border:1px solid var(--line);font-size:14px;line-height:1.45}
+.paid-q img{width:40px;height:40px;border-radius:11px;background:#fff;object-fit:contain;flex:none}
+.inc-sub{display:block;font:500 11px var(--body);color:var(--faint);margin-top:2px;text-align:right}
+.inc-suggest{all:unset;box-sizing:border-box;cursor:pointer;display:grid;grid-template-columns:18px minmax(0,1fr) 16px;gap:12px;align-items:center;width:100%;margin-top:10px;padding:12px 14px;border-radius:14px;border:1px dashed var(--line);background:rgba(67,211,162,.06)}
+.inc-suggest b{display:block;font-size:14px} .inc-suggest small{font-size:12px;color:var(--faint)}
 </style>
 </head>
 <body>
@@ -994,6 +1000,6 @@ body[data-view="penny"] .mhead .brand{visibility:hidden}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
 <script src="config.js?v=3" onerror="void 0"></script>
-<script src="app.js?v=40"></script>
+<script src="app.js?v=41"></script>
 </body>
 </html>
