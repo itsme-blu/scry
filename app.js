@@ -1943,7 +1943,7 @@ async function acceptOne(it) {
       const b = split.bill;
       [first] = await DB.insert('transactions', { kind: 'expense', amount: split.base, date, account_id: a.id, note: b ? b.name : note, category_id: b?.category_id || guessCategory(note, 'expense'), tag: b?.tag || 'personal', inbox_id: it.id, bill_id: b?.id || null });
       await DB.insert('transactions', { kind: 'expense', amount: split.fee, date, account_id: a.id, note: `${b ? b.name : note} fee`, category_id: await catFor('expense', 'Fees', '🧾'), tag: b?.tag || 'personal' });
-      if (b) await DB.update('bills', b.id, b.repeat === 'none' ? { active: false } : { due_date: nextDate(b.due_date, b.repeat) || b.due_date });
+      if (b) await DB.update('bills', b.id, b.repeat === 'none' ? { active: false, last_paid: date } : { due_date: nextDate(b.due_date, b.repeat) || b.due_date, last_paid: date });
     }
     await DB.update('inbox', it.id, { status: 'done', transaction_id: first.id });
   });
@@ -2093,7 +2093,15 @@ async function checkForUpdate() {
     }
   } catch { /* offline or blocked: keep running the current version */ }
 }
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { checkForUpdate(); setTimeout(checkPaying, 400); } });
+// Back on the tab: pick up anything changed on another device (approved on the phone, bills moved…).
+let lastSync = Date.now();
+async function resync() {
+  if (isDemo() || !S.sb || !S.user || Date.now() - lastSync < 20000 || $('#modal-root').innerHTML) return;
+  lastSync = Date.now();
+  try { for (const t of TABLES) S.d[t] = await fetchAll(t); render(); } catch { /* offline: keep what's on screen */ }
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { checkForUpdate(); setTimeout(checkPaying, 400); resync(); } });
+window.addEventListener('focus', resync);
 checkForUpdate();
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => { /* still works without it */ });
 boot();
