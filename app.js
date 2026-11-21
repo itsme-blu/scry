@@ -96,7 +96,7 @@ const RULES = [
 // ---------- notification safety (mirrors looks_like_code / has_money_amount / money_redact in schema.sql) ----------
 // A pattern check reduces risk; it cannot promise every login-code message is caught.
 // (No "authori…": MariBank ends every alert with "If unauthorized, please chat with us", Nov 21 2026.)
-const CODE_WORDS = /otp|one[- ]?time|verif|authenticat|passcode|pass code|password|\bpin\b|mpin|security code|log[- ]?in|sign[- ]?in|access code|confirmation code|activation|new device|do not share|don't share|never share|huwag (mo )?(ibigay|ibahagi|i-share)|wag (mo )?(ibigay|ibahagi)/i;
+const CODE_WORDS = /otp|one[- ]?time|verification|verify (?:your (?:identity|account|login|device|number|email)|it.?s you)|authenticat|passcode|pass code|password|\bpin\b|mpin|security code|log[- ]?in|sign[- ]?in|access code|confirmation code|activation|new device|do not share|don't share|never share|huwag (mo )?(ibigay|ibahagi|i-share)|wag (mo )?(ibigay|ibahagi)/i;
 function looksLikeCode(t) {
   t = String(t || '');
   return CODE_WORDS.test(t) || /code[^0-9]{0,25}[0-9]{4,8}(?![0-9])/i.test(t) || /(^|[^0-9])[0-9]{4,8}[^0-9]{0,25}(is your|as your)/i.test(t);
@@ -399,8 +399,10 @@ function sourceOf(item) {
 // Biller name from the sender ("PLDTHome" → PLDT) or the text ("for PLDT Account")
 function billerOf(item) {
   const text = `${item.title || ''} ${item.body || ''}`;
+  const bm = text.match(/\bbiller:\s*([A-Za-z0-9&'. \-]{2,40}?)\s*(?:\.\s|bill amount|amount|reference|$)/i) || text.match(/\bpayment (?:of [^.]{0,30}? )?to ([A-Z][A-Za-z0-9&' \-]{2,40}?)(?:\.|,| for\b|$)/);
   const known = [['PLDT', /pldt/i], ['Meralco', /meralco/i], ['Globe', /globe/i], ['Smart', /\bsmart\b/i], ['Converge', /converge/i], ['Maynilad', /maynilad/i], ['Manila Water', /manila water/i], ['Sky', /\bsky ?(cable|fiber)\b/i], ['DITO', /\bdito\b/i]];
   const k = known.find(([, re]) => re.test(text)); if (k) return k[0];
+  if (bm) return bm[1].replace(/\s+(inc|corp|co)\.?$/i, '').trim();
   const m = text.match(/\b(?:for|from)\s+([A-Z][A-Za-z&.\- ]{2,30}?)\s+(?:account|acct|bill|subscription)\b/i);
   return m ? m[1].trim() : (item.title || '').replace(/\s*(home|ph|alerts?|notify|noreply|no-reply)\s*$/i, '').trim() || null;
 }
@@ -438,7 +440,7 @@ function parseNotif(item) {
         || text.match(/(?<![0-9/.-])([0-9]{1,3}(?:,[0-9]{3})+\.[0-9]{2}|[0-9]+\.[0-9]{2})(?![0-9/])/);   // else any money-looking number with centavos
       if (near) amount = Number(near[1].replace(/,/g, ''));
     }
-    const paid = /thank you for (?:your )?payment|payment (?:of|amounting to)[^.]{0,40}(?:has been |was )?(?:received|posted|credited)|we(?:'ve| have) received your payment|successfully paid|payment received/i.test(text);
+    const paid = /thank you for (?:your )?payment|payment (?:of|amounting to)[^.]{0,40}(?:has been |was )?(?:received|posted|credited)|we(?:'ve| have) received your payment|successfully paid|payment received|successful (?:bill )?payment|successfully processed your payment|payment (?:was |is )?successful/i.test(text);
     const due = /\bdue\b|amount due|total amount due|statement of account|your (?:bill|soa)|bill (?:is|amounting)|please pay|\bbill\b|\bsoa\b|\bbilling\b|e-?statement/i.test(text);
     const k = paid ? 'billpaid' : due ? 'billdue' : null;
     return { amount, currency, kind: k, party: billerOf(item), due: k === 'billdue' ? billDueOf(item) : null, ref: rm ? rm[1] : null, ok: k != null };   // amount may be missing (subject-only email)
@@ -482,7 +484,10 @@ function inboxCheck(it) {
   if (sourceOf(it) !== 'bank') {
     const p = parseNotif(it), date = iso(new Date(it.received_at));
     const bill = p.party ? S.d.bills.find(b => b.active && (norm(b.name).includes(norm(p.party)) || norm(p.party).includes(norm(b.name)))) : null;
-    const dup = p.kind === 'billpaid' && p.amount != null ? S.d.transactions.find(t => t.kind === 'expense' && Math.abs(num(t.amount) - p.amount) < 0.005 && Math.abs(daysBetween(t.date, date)) <= 3) : null;
+    const near = S.d.transactions.filter(t => t.kind === 'expense' && Math.abs(daysBetween(t.date, date)) <= 3);
+    const dup = p.kind === 'billpaid' && p.amount != null ? (near.find(t => Math.abs(num(t.amount) - p.amount) < 0.005)
+      || near.find(t => t.bill_id && near.some(f => f !== t && f.note === `${t.note} fee` && Math.abs(num(t.amount) + num(f.amount) - p.amount) < 0.005))
+      || newInbox().find(o => o.id !== it.id && sourceOf(o) === 'bank' && Math.abs((parseNotif(o).amount ?? -1) - p.amount) < 0.005 && Math.abs(daysBetween(iso(new Date(o.received_at)), date)) <= 3)) : null;
     return { p, a: null, date, bill, dup, biller: true, ready: false };
   }
   const p = parseNotif(it), a = inboxAccount(it), date = iso(new Date(it.received_at));
@@ -1283,7 +1288,7 @@ function vSettings() {
           <ol class="small muted" style="line-height:1.75;padding-left:18px">
             <li>Install <b>MacroDroid</b> from the Play Store, open it, tap <b>Add Macro</b>, name it <b>Scry</b>.</li>
             <li><b>Trigger</b> → Device Events → <b>Notification</b> → <b>Notification Received</b> → <b>Select application(s)</b>: GCash, MariBank, GoTyme, Wise. Allow notification access when Android asks.</li>
-            <li><b>Required filter</b>, same screen: text content → <b>Matches</b>, tick <b>Regex</b>, paste:<br><code>(?is)^(?!.*(otp|one.?time|verif|passcode|password|\bpin\b|mpin|do not share)).*(PHP|₱|USD|CAD|SGD|\bP ?[0-9]|bill|due|payment|statement|soa|amount).*$</code><br>Only money and bill notifications without login words ever leave your phone.</li>
+            <li><b>Required filter</b>, same screen: text content → <b>Matches</b>, tick <b>Regex</b>, paste:<br><code>(?is)^(?!.*(otp|one.?time|verification|passcode|password|\bpin\b|mpin|do not share)).*(PHP|₱|USD|CAD|SGD|\bP ?[0-9]|bill|due|payment|statement|soa|amount).*$</code><br>Only money and bill notifications without login words ever leave your phone.</li>
             <li><b>Action</b> → Web Interactions → <b>HTTP Request</b>. Method <b>POST</b>. URL: <code>${esc(url)}/functions/v1/ingest</code></li>
             <li><b>Query Params</b> tab, add five: <code>key</code> = your phone key · <code>app</code> = {not_app_name} · <code>pkg</code> = {not_app_package} · <code>title</code> = {not_title} · <code>text</code> = {notification}. Use the magic-text button to insert the {…} items.</li>
             <li>Save. Pay ₱1 with GCash: it should show in <b>To review</b> within a minute.</li>
@@ -1417,8 +1422,20 @@ document.addEventListener('click', ev => {
   const a = ev.target.closest('a.pa[data-bank]'), f = $('#payf'); if (!a || !f) return;
   const ac = activeAccounts().find(x => x.bank === a.dataset.bank && x.currency === 'PHP') || activeAccounts().find(x => x.bank === a.dataset.bank);
   const same = !ac || curOf(ac.id) === curOf(f.account_id.value);   // typed amounts only carry over in the same currency
-  LS.set(PAYING, { bill: f.dataset.bill, due: f.dataset.due, account_id: ac?.id || f.account_id.value, amount: same ? amt(f.amount.value) || null : null, fee: same ? amt(f.fee?.value) || 0 : 0, at: Date.now() });
+  const p = { bill: f.dataset.bill, due: f.dataset.due, account_id: ac?.id || f.account_id.value, amount: same ? amt(f.amount.value) || null : null, fee: same ? amt(f.fee?.value) || 0 : 0, at: Date.now() };
+  LS.set(PAYING, p);
+  setTimeout(() => { const b = S.d.bills.find(x => x.id === p.bill); if (b) paidPrompt(b, p); }, 700);   // waiting for him when he comes back
 }, true);
+// A bank or email message that matches a bill payment already logged (bill + fee) is closed and linked to it.
+async function autoLinkPaid() {
+  const done = [];
+  for (const it of newInbox()) {
+    let c; try { c = inboxCheck(it); } catch { continue; }
+    if (c.dup?.bill_id) done.push([it.id, c.dup.id]);
+  }
+  for (const [id, tx] of done) await DB.update('inbox', id, { status: 'done', transaction_id: tx }).catch(() => {});
+  if (done.length) render();
+}
 function checkPaying() {
   const p = LS.get(PAYING, null); if (!p || !S.mode) return;
   const age = Date.now() - p.at;
@@ -1427,11 +1444,15 @@ function checkPaying() {
   const b = S.d.bills.find(x => x.id === p.bill);
   if (!b || !b.active || (b.last_paid && b.last_paid >= iso(new Date(p.at)))) return LS.del(PAYING);
   const open = $('#modal-root').innerHTML; if (open && !$('#payf')) return;   // something else is open: ask next time
-  LS.del(PAYING); paidPrompt(b, p);
+  LS.del(PAYING); if ($('#modal-root').textContent.includes('Did you pay')) return; paidPrompt(b, p);
 }
-function paidPrompt(b, p) {
+function paidPrompt(b, p0) {
+  let p = p0;
   const a = acc(p.account_id), cur = curOf(p.account_id), r = rate(cur);
   const amt0 = p.amount ?? (cur === 'PHP' || !r ? num(b.amount) : num(b.amount) / r);
+  if (!p.fee) { const fc = S.d.categories.find(c => c.kind === 'expense' && norm(c.name) === 'fees');
+    const last = fc && S.d.transactions.filter(t => t.category_id === fc.id && t.account_id === p.account_id).sort((x, y) => y.date.localeCompare(x.date))[0];
+    if (last) p = { ...p, fee: num(last.amount) }; }
   modal(`Did you pay ${b.name}?`, `<form class="form" id="payf" data-bill="${b.id}" data-due="${p.due}" onsubmit="return false">
     <div class="paid-q">${a?.bank && BANK_LOGO[a.bank] ? `<img src="${BANK_LOGO[a.bank]}" alt="">` : IC('receipt')}<div>You opened <b>${esc(BANK_APP[a?.bank]?.name || 'your app')}</b> to pay this. If it went through, check the amount and log it. Add the fee if the app charged one.</div></div>
     ${amountField('amount', amt0, cur)}
@@ -1803,6 +1824,7 @@ const A = {
       // The bank's own notification for this payment may already be waiting in To review: close it so it isn't logged twice.
       const it = newInbox().find(i => { const c = inboxCheck(i); return c.a?.id === v.account_id && c.p.kind === 'expense' && c.p.amount != null && Math.abs(c.p.amount - (amount + fee)) < 0.005 && Math.abs(daysBetween(c.date, v.date)) <= 2; });
       if (it && t) await DB.update('inbox', it.id, { status: 'done', transaction_id: t.id });
+      if (t) setTimeout(autoLinkPaid, 0);
       const nd = nextDate(el.dataset.date, b.repeat);
       await DB.update('bills', b.id, nd ? { due_date: nd, last_paid: v.date } : { active: false, last_paid: v.date });
     });
@@ -2037,9 +2059,10 @@ async function boot() {
   try { await DB.load(); await seedIfEmpty(); await loadKeyStatus(); }
   catch (e) { console.error(e); return gate(`<p class="warn">Could not load your data: ${esc(e.message || e)}</p><p class="xs muted">If this is a new project, run schema.sql in the Supabase SQL editor first.</p><button class="btn" data-a="disconnect">Back</button>`); }
   render(); checkPaying();
+  autoLinkPaid();
   if (!isDemo()) setInterval(async () => {
     if (document.hidden || $('#modal-root').innerHTML) return;
-    try { const before = newInbox().length; S.d.inbox = await fetchAll('inbox'); if (newInbox().length !== before) render(); } catch { /* offline */ }
+    try { const before = newInbox().length; S.d.inbox = await fetchAll('inbox'); await autoLinkPaid(); if (newInbox().length !== before) render(); } catch { /* offline */ }
   }, 60000);
 }
 // Auto-update: phones keep an old copy of the page for a while. On open (and when the app comes back
