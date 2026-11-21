@@ -689,6 +689,41 @@ details.orig div{margin-top:8px;padding:10px 12px;border-radius:14px;background:
 .bcard[data-brand="cash"]{background:linear-gradient(135deg,#2E7D5B,#1B5A40 60%,#123F2D)}
 .bcard::before{background:linear-gradient(115deg,rgba(255,255,255,.16) 0%,rgba(255,255,255,0) 38%),radial-gradient(140% 90% at 100% 100%,rgba(0,0,0,.22),transparent 60%)}
 .bcard .lg{background:transparent;box-shadow:none;width:26px;height:26px;border-radius:7px;overflow:hidden}
+/* v17: real card art + official logos */
+.bcard .art{position:absolute;z-index:0;pointer-events:none}
+.bcard .art.full{inset:0;width:100%;height:100%;object-fit:cover}
+.bcard[data-brand="maribank"]{background:#FF6A00}
+.bcard[data-brand="maribank"]::before{display:none}
+.bcard .art.mtop{left:0;top:0;width:100%;height:auto}
+.bcard[data-brand="maribank"] .bot{text-shadow:0 1px 3px rgba(120,40,0,.45)}
+.bcard[data-brand="maribank"] .top{min-height:0}
+/* GoTyme: dark top, cyan stripes, cyan band with the logo (their Visa debit design) */
+.bcard[data-brand="gotyme"]{background:linear-gradient(180deg,#2B3550,#1A2033 70%)}
+.bcard .art.gt{inset:0}
+.bcard .art.gt .stripes{position:absolute;left:0;right:0;top:24%;bottom:30%;
+  background:repeating-linear-gradient(180deg,#22E1E6 0 var(--th,2px),transparent var(--th,2px) 7px);
+  -webkit-mask:linear-gradient(180deg,rgba(0,0,0,.25),#000);mask:linear-gradient(180deg,rgba(0,0,0,.25),#000)}
+.bcard .art.gt .band{position:absolute;left:0;right:0;bottom:0;height:30%;background:#22E1E6;display:flex;align-items:center;justify-content:flex-end;padding:0 6%}
+.bcard .art.gt .band img{height:56%;width:auto}
+.bcard[data-brand="gotyme"] .bot{margin-bottom:28%;text-shadow:0 1px 6px rgba(0,0,0,.6)}
+.bcard[data-brand="gotyme"] .chip{position:absolute;top:16px;right:18px}
+.bcard[data-brand="gotyme"]::before{background:linear-gradient(115deg,rgba(255,255,255,.12),transparent 40%)}
+/* GCash */
+.bcard[data-brand="gcash"]{background:linear-gradient(135deg,#2C7BFF,#0A55E8 55%,#0640B8)}
+.bcard .art.gc-big{right:-16%;top:50%;transform:translateY(-50%);width:78%;opacity:.13}
+.bcard .hd-gc{height:24px;width:auto}
+/* Wise */
+.bcard[data-brand="wise"]{background:#9FE870;color:#163300}
+.bcard[data-brand="wise"]::before{background:linear-gradient(115deg,rgba(255,255,255,.25),transparent 40%)}
+.bcard .art.wise-flag{right:-4%;bottom:-18%;height:120%;width:auto;opacity:.09}
+.bcard .hd-wise{height:20px;width:auto}
+.bcard .top .cur{font:800 12px var(--display);letter-spacing:.08em;padding:3px 8px;border-radius:999px;background:rgba(22,51,0,.12)}
+.bcard .top{min-height:26px}
+@media (max-width:760px){
+  .cardgrid.wallet .bcard .hd-gc{height:18px} .cardgrid.wallet .bcard .hd-wise{height:14px}
+  .cardgrid.wallet .bcard[data-brand="gotyme"] .chip{top:10px;right:12px}
+  .cardgrid.wallet .bcard .top .cur{font-size:9px;padding:2px 6px}
+}
 </style>
 </head>
 <body>
@@ -697,6 +732,6 @@ details.orig div{margin-top:8px;padding:10px 12px;border-radius:14px;background:
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
 <script src="config.js?v=3" onerror="void 0"></script>
-<script src="app.js?v=16"></script>
+<script src="app.js?v=17"></script>
 </body>
 </html>

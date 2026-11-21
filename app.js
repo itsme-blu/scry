@@ -605,14 +605,27 @@ function tray(limit) {
 // ---------- views ----------
 const CAT_ICON = { 'food & groceries': 'shopping-cart', 'dining out': 'utensils', transport: 'car', utilities: 'lightbulb', 'phone & internet': 'wifi', 'rent & home': 'house', health: 'heart-pulse', 'family support': 'users', shopping: 'shopping-bag', subscriptions: 'repeat', education: 'book-open', 'personal care': 'sparkles', entertainment: 'film', fees: 'receipt', 'business': 'briefcase', gifts: 'gift', travel: 'plane', insurance: 'shield', savings: 'piggy-bank' };
 const catLucide = c => CAT_ICON[String(c?.name || '').toLowerCase()] || 'tag';
-// One account as a bank card. Brand colours come from the bank; no card numbers, real or fake.
+// One account as a bank card, drawn from each bank's real card and official logo files (brand/cards/).
+// No card numbers, real or fake.
+const CARD_ART = {
+  maribank: () => '<img class="art mtop" src="brand/cards/maribank-top.jpg" alt="">',
+  gotyme: () => '<div class="art gt" aria-hidden="true"><i class="stripes"></i><div class="band"><img src="brand/cards/gotyme-logo-dark.svg" alt=""></div></div>',
+  gcash: () => '<img class="art gc-big" src="brand/cards/gcash-icon-white.svg" alt="">',
+  wise: () => '<img class="art wise-flag" src="brand/cards/wise-flag.svg" alt="">',
+};
+const CARD_HEAD = {
+  maribank: () => '',
+  gotyme: () => '',
+  gcash: () => '<img class="hd-gc" src="brand/cards/gcash-icon-white.svg" alt=""><span class="nm">GCash</span>',
+  wise: a => `<img class="hd-wise" src="brand/cards/wise-logo.svg" alt="Wise">${a.currency !== 'PHP' || /wise\s+\w+/i.test(a.name) ? `<span class="cur">${esc(a.currency)}</span>` : ''}`,
+};
 function bankCard(a, bal) {
   const brand = a.bank || (a.type === 'cash' ? 'cash' : a.type === 'credit' ? 'credit' : 'other');
-  const logo = (a.bank && BANK_LOGO[a.bank]) || null;
+  const art = CARD_ART[brand]?.() || '';
+  const head = CARD_HEAD[brand] ? CARD_HEAD[brand](a) : `<span class="lg">${accIcon(a, 30)}</span><span class="nm">${esc(a.name)}</span>`;
+  const chip = brand === 'maribank' ? '' : '<span class="chip" aria-hidden="true"></span>';
   return `<div class="bcard" data-brand="${brand}" data-a="cardMenu" data-id="${a.id}" role="button" tabindex="0" aria-label="${esc(a.name)}, ${money(bal, a.currency)}">
-    ${logo ? `<img class="wm" src="${logo}" alt="">` : ''}
-    <div class="top"><span class="lg">${accIcon(a, 30)}</span><span class="nm">${esc(a.name)}</span></div>
-    <span class="chip" aria-hidden="true"></span>
+    ${art}<div class="top">${head}</div>${chip}
     <div class="bot"><div class="k">Balance</div><div class="m ${bal < 0 ? 'neg' : ''}">${money(bal, a.currency)}</div></div></div>`;
 }
 function vHome() {
