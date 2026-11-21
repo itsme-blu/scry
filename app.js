@@ -608,7 +608,7 @@ const catLucide = c => CAT_ICON[String(c?.name || '').toLowerCase()] || 'tag';
 // One account as a bank card, drawn from each bank's real card and official logo files (brand/cards/).
 // No card numbers, real or fake.
 const CARD_ART = {
-  maribank: () => '<img class="art mtop" src="brand/cards/maribank-top.jpg" alt="">',
+  maribank: () => '',
   gotyme: () => '<div class="art gt" aria-hidden="true"><i class="stripes"></i><div class="band"><img src="brand/cards/gotyme-logo-dark.svg" alt=""></div></div>',
   gcash: () => '<img class="art gc-big" src="brand/cards/gcash-icon-white.svg" alt="">',
   wise: () => '<img class="art wise-flag" src="brand/cards/wise-flag.svg" alt="">',
@@ -750,7 +750,7 @@ function vHome() {
   return `<div class="hello only-desk"><div class="hi cap">${new Date().toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric' })}</div><div class="nm">Hello, ${esc(nm)}!</div></div>`
   + (isDemo() && !S.settings.hideBanner ? `<div class="demo-banner" role="note"><span><b>You're looking at demo data.</b> Every number and notification here is a made-up sample, stored only in this browser.</span><button data-a="hideBanner" aria-label="Hide this note">${IC('x', 'sm')}</button></div>` : '')
   + `<div class="hg">
-    <section class="card hero balance c7" style="--o:1">
+    <section class="card hero balance lux c7" style="--o:1"><span class="lux-guil" aria-hidden="true"></span><span class="lux-sheen" aria-hidden="true"></span><img class="lux-mark" src="brand/scry-mark.svg" alt="">
       <div class="bh"><span class="cap k">Total balance</span><span class="grow"></span>
         <button class="eye" data-a="toggleHide" aria-label="${hidden ? 'Show amounts' : 'Hide amounts'}" aria-pressed="${hidden}">${IC(hidden ? 'eye-off' : 'eye', 'sm')}</button></div>
       <div class="v ${w.net < 0 ? 'neg' : ''}">${whole}<small>${cents}</small></div>
