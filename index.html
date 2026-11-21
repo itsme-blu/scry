@@ -385,9 +385,6 @@ select option{background:#121a36}
 .balance .chip{display:inline-flex;align-items:center;gap:6px;margin-top:12px;font-size:13px;font-weight:700;color:var(--ok);background:var(--ok-bg);padding:5px 11px;border-radius:99px}
 .balance .chip.owe{color:var(--risk);background:var(--risk-bg)}
 .balance>svg{display:block;width:100%;height:54px;margin-top:14px}
-.home-col .rv{grid-template-columns:38px minmax(0,1fr)}
-.home-col .rv .raw{grid-column:1/3}
-.home-col .rv .acts{grid-column:1/3;justify-content:flex-end}
 .quick{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:18px 0}
 .quick a,.quick button{all:unset;cursor:pointer;text-align:center;font:600 12.5px var(--body);color:#C9D2EA}
 .quick .b{width:58px;height:58px;margin:0 auto 7px;border-radius:20px;display:grid;place-items:center;background:rgba(255,255,255,.08);border:1px solid var(--line);transition:transform .12s}
@@ -425,6 +422,100 @@ select option{background:#121a36}
 .scan-note{display:flex;gap:8px;align-items:flex-start}
 #scanLines .item{cursor:pointer}
 </style>
+<style id="aurora-2">
+/* ===== Aurora v2 (Nov 21 2026, from Paige's review): rows not stacks, one gold per view, 2-line lists ===== */
+:root{--gap:20px}
+/* calmer active states: the balance is the brightest thing on screen */
+.nav a.on{background:rgba(255,255,255,.10);color:var(--ink)}
+.nav a.on .count{background:var(--violet);color:#0B0B22}
+.nav a.penny-link,.nav a.penny-link.on{color:var(--ink)} .nav a.penny-link .lc{color:var(--gold-1)}
+.chips button.on{background:rgba(255,255,255,.16);color:var(--ink)}
+.chips{padding:3px;border-radius:12px} .chips button{padding:5px 11px;font-size:13px;border-radius:9px}
+body[data-view="home"] .fab,body[data-view="penny"] .fab{display:none}
+.card h2{font:700 17px var(--display);letter-spacing:-.01em;margin:0 0 12px}
+.card h2 small a{color:var(--faint)}
+.only-phone{display:none}
+/* home grid: rows of paired cards that always match height */
+.hello{margin-bottom:24px}
+.hello .hi{font-size:13px}
+.hg{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:var(--gap);align-items:stretch}
+.hg>*{min-width:0}
+.c12{grid-column:span 12}.c7{grid-column:span 7}.c6{grid-column:span 6}.c5{grid-column:span 5}
+.c6>.card{height:100%}
+.balance{padding:24px;display:flex;flex-direction:column}
+.balance .bh{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.balance .v{margin-top:12px}
+.balance .chip{align-self:flex-start}
+.balance .fine{font-size:12px;color:var(--faint);margin-top:8px} .balance .fine a{color:var(--muted)}
+.balance .hq{display:flex;gap:8px;flex-wrap:wrap;margin-top:auto;padding-top:24px}
+.balance .hq .btn{height:40px;border-radius:999px;padding:0 16px;gap:8px;display:inline-flex;align-items:center;text-decoration:none}
+.month{display:flex;flex-direction:column;gap:16px}
+.month>div:last-child{margin-top:auto}
+.month .trio .mid{font-size:22px}
+.balance .hq a.btn{color:var(--ink)}
+.empty1{padding:16px 0;text-align:center;color:var(--faint);font-size:13px}
+.slim{display:flex;align-items:center;gap:8px;justify-content:center;padding:20px;color:var(--faint);font-size:13px}
+.sechead{margin:4px 2px 12px}
+@media (min-width:1001px){
+  .acc-strip{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));overflow:visible}
+  .acc-tile{border-radius:20px}
+}
+/* review: one quiet card, 2-line rows */
+.tray{background:var(--glass),rgba(12,17,36,.55);border-color:var(--line);padding:20px 20px 8px}
+.trh{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+.trh b{font:700 17px var(--display)}
+.trh .count{background:var(--violet);color:#0B0B22;border-radius:999px;font:700 12px var(--body);padding:2px 8px}
+.trh .btn{display:inline-flex;align-items:center;gap:6px}
+.rvlist{display:flex;flex-direction:column}
+.rvr{display:grid;grid-template-columns:40px minmax(0,1fr) auto auto;gap:12px;align-items:center;padding:12px 4px;border-top:1px solid var(--line-soft);cursor:pointer;border-radius:14px}
+.rvr:first-child{border-top:0}
+.rvr:hover{background:rgba(255,255,255,.04)}
+.rvr .lg{width:40px;height:40px;border-radius:14px;overflow:hidden;background:#fff;display:grid;place-items:center;color:#0A0F22;font-weight:800}
+.rvr .lg img{width:100%;height:100%;object-fit:contain}
+.rvr .t{font-weight:600;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rvr .s{font-size:12px;color:var(--faint);display:flex;gap:6px;white-space:nowrap;overflow:hidden;margin-top:2px}
+.rvr .s .st{color:var(--muted);overflow:hidden;text-overflow:ellipsis;min-width:0}
+.rvr .s .when{flex:none}
+.rvr .s .st:not(:empty)::after{content:"·";margin-left:6px;color:var(--faint)}
+.rvr .s .st.ask{color:var(--gold-1);font-weight:600}
+.rvr .s .st.risk{color:var(--risk);font-weight:600}
+.rvr .amt{font:700 16px var(--display);font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right}
+.rvr .ra{display:flex;gap:6px;min-width:36px;justify-content:flex-end}
+.rbtn{width:36px;height:36px;border-radius:999px;display:grid;place-items:center;background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--muted);cursor:pointer}
+.rbtn.ok{background:var(--ok-bg);border-color:rgba(63,224,194,.4);color:var(--ok)}
+.rbtn:hover{filter:brightness(1.25)}
+.rbtn.hov{opacity:0;transition:opacity .12s}
+.rvr:hover .rbtn.hov,.rbtn.hov:focus-visible{opacity:1}
+.tray .more{display:block;text-align:center;padding:12px;font-size:13px;color:var(--faint);border-top:1px solid var(--line-soft)}
+.rv-strip{display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:20px;text-decoration:none;color:var(--ink);background:linear-gradient(110deg,rgba(143,132,255,.22),rgba(143,132,255,.06)),rgba(14,18,40,.55);border:1px solid rgba(170,160,255,.3)}
+.rv-strip .n{width:40px;height:40px;border-radius:14px;background:var(--violet);color:#0B0B22;display:grid;place-items:center;font:800 17px var(--display)}
+.rv-strip b{font:700 15px var(--display)} .rv-strip .s{font-size:13px;color:var(--muted)}
+.rv-strip .lc{color:var(--muted)}
+details.orig{font-size:13px;color:var(--faint)} details.orig summary{cursor:pointer;color:var(--muted)}
+details.orig div{margin-top:8px;padding:10px 12px;border-radius:14px;background:rgba(255,255,255,.05);line-height:1.45}
+.mhead .greet{display:flex;align-items:center;gap:10px}
+.mhead .greet .mark{width:32px;height:32px}
+.mhead .greet .hi{font:500 12px var(--body);color:var(--muted)} .mhead .greet .nm{font:800 18px var(--display);letter-spacing:-.02em;line-height:1.1}
+@media (max-width:1000px){
+  .hg{grid-template-columns:minmax(0,1fr);gap:16px}
+  .hg>*{grid-column:1/-1;order:var(--o,10)}
+  .only-desk{display:none!important}
+  .only-phone{display:block}
+  .quick.only-phone{display:grid;margin:4px 0}
+  .main-narrow,main{max-width:none}
+}
+@media (max-width:760px){
+  .balance{padding:20px}
+  .rbtn.hov{display:none}
+  .card{padding:16px}
+  .tray{padding:16px 16px 4px}
+  .rvr{gap:10px;padding:12px 0}
+}
+.penny-form .btn.cam{width:44px;padding:0;display:grid;place-items:center;flex:none}
+.psave{margin-top:12px;padding-top:12px;border-top:1px solid var(--line-soft)}
+.psave .btn{display:inline-flex;align-items:center;gap:6px}
+.photo-tag{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;opacity:.8}
+</style>
 </head>
 <body>
 <div id="root"></div>
@@ -432,6 +523,6 @@ select option{background:#121a36}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
 <script src="config.js?v=3" onerror="void 0"></script>
-<script src="app.js?v=10"></script>
+<script src="app.js?v=11"></script>
 </body>
 </html>

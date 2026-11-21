@@ -434,7 +434,10 @@ function renderNav() {
   $('#tabnav').innerHTML = NAV.map(link).join('');
 }
 function mhead() {
-  return `<div class="mhead"><div class="brand"><img class="mark" src="brand/scry-icon.svg" alt="">Scry</div>${isDemo() ? '<span class="demo-pill">Demo</span>' : ''}
+  const hr = new Date().getHours(), hi = hr < 12 ? 'Good morning' : hr < 18 ? 'Good afternoon' : 'Good evening';
+  const nm = String(S.user?.user_metadata?.own_names || '').split(',')[0].trim().split(' ')[0] || 'Blu';
+  const brand = S.view === 'home' ? `<div class="brand greet"><img class="mark" src="brand/scry-icon.svg" alt=""><div><div class="hi">${hi}</div><div class="nm">${esc(nm)}</div></div></div>` : `<div class="brand"><img class="mark" src="brand/scry-icon.svg" alt="">Scry</div>`;
+  return `<div class="mhead">${brand}${isDemo() ? '<span class="demo-pill">Demo</span>' : ''}
     <a href="#penny" class="gear penny-btn ${S.view === 'penny' ? 'on' : ''}" aria-label="Ask Penny, your AI accountant" style="color:var(--gold-1)">${IC('sparkles')}</a>
     <a href="#settings" class="gear ${S.view === 'settings' ? 'on' : ''}" aria-label="Settings">${IC('settings')}</a></div>`;
 }
@@ -442,6 +445,7 @@ function render() {
   if (!$('#main')) $('#root').innerHTML = shell();
   renderNav();
   const V = { home: vHome, tx: vTx, budget: vBudget, bills: vBills, accounts: vAccounts, settings: vSettings, penny: vPenny }[S.view] || vHome;
+  document.body.dataset.view = S.view;
   $('#main').innerHTML = mhead() + V();
   drawIcons();
   if (S.view === 'penny') { const log = $('#pennyLog'); if (log) log.scrollTop = log.scrollHeight; }
@@ -460,24 +464,46 @@ function pennyText(t) {
     .replace(/\n/g, '<br>');
 }
 function vPenny() {
-  const msgs = S.penny.map(m => m.role === 'user'
-    ? `<div class="pm me"><div class="bubble">${esc(m.content)}</div></div>`
-    : `<div class="pm her"><span class="penny-dot lg" aria-hidden="true">P</span><div class="bubble ${m.error ? 'err' : ''}">${pennyText(m.content)}</div></div>`).join('');
+  const msgs = S.penny.map((m, i) => m.role === 'user'
+    ? `<div class="pm me"><div class="bubble">${m.photo ? `<span class="photo-tag">${IC('camera', 'sm')} Photo</span> ` : ''}${esc(m.content)}</div></div>`
+    : `<div class="pm her"><span class="penny-dot lg" aria-hidden="true">P</span><div class="bubble ${m.error ? 'err' : ''}">${pennyText(m.content)}${pennySaveBtn(m, i)}</div></div>`).join('');
   const intro = `<div class="pm her"><span class="penny-dot lg" aria-hidden="true">P</span><div class="bubble">Hi Blu, I'm <b>Penny</b>, your accountant here in Scry. I can see your accounts, spending, budgets and bills, and I'll keep Daybreak's money separate from yours. Ask me anything about your finances.${isDemo() ? '<br><br><span class="warn">In demo mode I\'m asleep: I only work with your live data.</span>' : ''}</div></div>`;
   return ph('AI accountant', 'Ask Penny', 'Money questions only. She reads your Scry data and never changes it.',
       S.penny.length ? '<button class="btn ghost sm" data-a="pennyClear">New conversation</button>' : '')
   + `<section class="card penny-card"><div class="penny-log" id="pennyLog" aria-live="polite">${intro}${msgs}${S.pennyBusy ? '<div class="pm her"><span class="penny-dot lg" aria-hidden="true">P</span><div class="bubble typing">Penny is looking at your numbers…</div></div>' : ''}</div>
     ${S.penny.length ? '' : `<div class="catpick starters">${PENNY_STARTERS.map(q => `<button data-a="pennyAsk" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div>`}
     <form class="penny-form" onsubmit="return false"><textarea id="pennyIn" rows="2" placeholder="Ask about your money… e.g. Can I afford a ₱5,000 phone this month?" ${S.pennyBusy || isDemo() ? 'disabled' : ''}></textarea>
+      <button type="button" class="btn cam" data-a="pennyScan" aria-label="Show Penny a photo of a bill or receipt" title="Scan a bill or receipt" ${S.pennyBusy || isDemo() ? 'disabled' : ''}>${IC('camera')}</button>
       <button class="btn pri" data-a="pennySend" ${S.pennyBusy || isDemo() ? 'disabled' : ''}>Ask</button></form>
     <div class="xs faint" style="margin-top:8px">Penny uses Claude (Anthropic). Your question and a summary of your Scry data are sent to Claude to answer. She's not a licensed financial adviser.</div></section>`;
 }
-async function pennySend(q) {
+// A scanned photo's details ride on Penny's reply so Blu can save them with one tap.
+function pennySaveBtn(m, i) {
+  const r = m.scan; if (!r || m.saved || !['receipt', 'card_slip', 'bill', 'card_statement'].includes(r.doc_type) || !(r.total || r.lines?.length)) return '';
+  const label = r.doc_type === 'bill' ? 'Save as a bill' : r.doc_type === 'card_statement' ? 'Add the charges' : 'Save as an expense';
+  return `<div class="psave"><button class="btn sm" data-a="pennySave" data-i="${i}">${IC('download', 'sm')} ${label}</button></div>`;
+}
+function pennyScan() {
+  if (isDemo() || S.pennyBusy) return;
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'image/*'; inp.setAttribute('capture', 'environment');
+  inp.onchange = async () => {
+    const f = inp.files[0]; if (!f) return;
+    let image; try { image = await shrinkPhoto(f); } catch { return toast("Couldn't open that photo"); }
+    const typed = ($('#pennyIn')?.value || '').trim();
+    pennySend(typed || 'Please check this for me. What is it, is anything off, and what should I do?', image);
+  };
+  inp.click();
+}
+async function pennySend(q, image) {
   q = String(q || '').trim(); if (!q || S.pennyBusy || isDemo()) return;
-  S.penny.push({ role: 'user', content: q }); S.pennyBusy = true; savePenny(); render();
+  S.penny.push({ role: 'user', content: q, photo: !!image }); S.pennyBusy = true; savePenny(); render();
+  const cats = S.d.categories.filter(c => !c.archived && c.kind === 'expense').map(c => c.name);
+  const scanP = image ? S.sb.functions.invoke('scan', { body: { image, media_type: 'image/jpeg', categories: cats, today: today() } }).then(x => x.data).catch(() => null) : Promise.resolve(null);
   try {
+    const history = S.penny.filter(m => !m.error).map(({ role, content, photo }) => ({ role, content: photo ? `[Blu showed you a photo here] ${content}` : content }));
     const { data, error } = await S.sb.functions.invoke('penny', {
-      body: { messages: S.penny.filter(m => !m.error).map(({ role, content }) => ({ role, content })), today: today(), rates: S.settings.rates },
+      body: { messages: history, image: image || undefined, today: today(), rates: S.settings.rates },
     });
     let msg = data?.reply, isErr = false;
     if (error) {
@@ -485,7 +511,8 @@ async function pennySend(q) {
       try { msg = (await error.context?.json?.())?.error; } catch { /* no body */ }
       msg ||= 'Penny couldn\'t answer right now. Try again in a moment.';
     }
-    S.penny.push({ role: 'assistant', content: msg || 'No answer came back.', error: isErr });
+    const scan = await scanP;
+    S.penny.push({ role: 'assistant', content: msg || 'No answer came back.', error: isErr, scan: !isErr && scan && !scan.error ? scan : undefined });
   } catch (e) {
     S.penny.push({ role: 'assistant', content: 'Penny couldn\'t be reached. Check your internet and try again.', error: true });
   }
@@ -524,36 +551,47 @@ function billRow(o, withPay = true) {
 }
 
 // ---------- review tray ----------
+// One review row: logo | what + status | amount | actions. Raw text lives only in the review sheet.
+function reviewRow(it) {
+  const { p, a, dup, curMismatch, ready, xfer, counted } = inboxCheck(it), bk = bankOf(it), bank = BANKS[bk];
+  let title, amtTxt = '', amtCls = '', status = '', st = '';
+  if (!p.ok) { title = it.title || 'Notification'; status = "Couldn't read this one"; st = 'risk'; }
+  else if (xfer) {
+    amtTxt = money(p.amount, p.currency); amtCls = 'muted';
+    if (counted) { title = `${xfer.from?.name || 'Transfer'} → ${xfer.to?.name || '?'}`; status = 'Already counted'; }
+    else if (xfer.from && xfer.to) { title = `${xfer.from.name} → ${xfer.to.name}`; status = 'Own transfer'; }
+    else if (!xfer.from) { title = `Into ${xfer.to?.name || 'your account'}`; status = 'From which account?'; st = 'ask'; }
+    else { title = `Out of ${xfer.from.name}`; status = 'To which account?'; st = 'ask'; }
+  } else {
+    title = p.party || (p.kind === 'income' ? 'Money in' : 'Money out');
+    amtTxt = (p.kind === 'income' ? '+' : '−') + money(p.amount, p.currency); amtCls = p.kind === 'income' ? 'pos' : '';
+    const g = cat(guessCategory(p.party || it.title, p.kind));
+    if (!a) { status = `No ${bank?.name || ''} account linked`; st = 'risk'; }
+    else if (curMismatch) { status = `${p.currency} account needed`; st = 'risk'; }
+    else if (dup) { status = 'Possible duplicate'; st = 'risk'; }
+    else status = [g?.name, a.name].filter(Boolean).join(' · ');
+  }
+  const logo = BANK_LOGO[bk] ? `<img src="${BANK_LOGO[bk]}" alt="" width="40" height="40">` : `<span>${esc((bank?.name || it.app || '?')[0])}</span>`;
+  const acts = counted ? `<button class="rbtn" data-a="ignoreInbox" data-id="${it.id}" aria-label="Dismiss">${IC('x', 'sm')}</button>`
+    : `${ready ? `<button class="rbtn ok" data-a="acceptInbox" data-id="${it.id}" aria-label="Approve">${IC('check', 'sm')}</button>` : ''}<button class="rbtn hov" data-a="ignoreInbox" data-id="${it.id}" aria-label="Dismiss">${IC('x', 'sm')}</button>`;
+  return `<div class="rvr" data-a="editInbox" data-id="${it.id}" role="button" tabindex="0">
+    <div class="lg" aria-hidden="true">${logo}</div>
+    <div class="main"><div class="t">${esc(title)}</div><div class="s"><span class="st ${st}">${esc(status)}</span><span class="when" title="${esc(bank?.name || it.app || '')}">${esc(timeOf(it.received_at))}</span></div></div>
+    <div class="amt ${amtCls}">${amtTxt}</div><div class="ra">${acts}</div></div>`;
+}
+function reviewStrip() {
+  const items = newInbox(); if (!items.length) return '';
+  const ready = items.filter(it => inboxCheck(it).ready).length;
+  return `<a class="rv-strip" href="#tx"><span class="n">${items.length}</span><div class="grow"><b>${items.length} to review</b><div class="s">${ready ? `${ready} ready to approve` : 'Tap to check them'}</div></div>${IC('chevron-right')}</a>`;
+}
 function tray(limit) {
   const items = newInbox(); if (!items.length) return '';
   const ready = items.filter(it => inboxCheck(it).ready).length;
-  const rows = items.slice(0, limit).map(it => {
-    const { p, a, dup, curMismatch, ready, xfer, counted } = inboxCheck(it), bank = BANKS[bankOf(it)];
-    const what = !p.ok ? `<span class="warn">Couldn't read this one</span>`
-      : xfer ? `<span class="amt muted">⇄ ${money(p.amount, p.currency)}</span> ${esc(xfer.from?.name || 'one of your accounts')} → ${esc(xfer.to?.name || 'one of your accounts')}`
-      : `<span class="amt ${p.kind === 'income' ? 'pos' : ''}">${p.kind === 'income' ? '+' : '−'}${money(p.amount, p.currency)}</span>${p.party ? `<span class="muted">${p.kind === 'income' ? 'from' : 'to'}</span> ${esc(p.party)}` : ''}`;
-    const g = p.ok && !xfer ? cat(guessCategory(p.party || it.title, p.kind)) : null;
-    const meta = [
-      xfer ? '<span class="badge ai">Your own transfer</span>' : '',
-      xfer && counted ? '<span class="badge ok">Already counted: dismiss this one</span>' : '',
-      xfer && !counted && !xfer.from ? '<span class="badge db">Tap Review to pick where it came from</span>' : '',
-      xfer && xfer.from && !xfer.to ? '<span class="badge db">Tap Review to pick where it went</span>' : '',
-      !xfer ? (a ? `<span class="badge">→ ${esc(a.name)}</span>` : `<span class="badge risk">No ${esc(bank?.name || '')} account linked</span>`) : '',
-      g ? `<span class="badge ai">${catIcon(g)} ${esc(g.name)}</span>` : '',
-      dup && !counted ? '<span class="badge db">Possible duplicate</span>' : '', curMismatch ? `<span class="badge db">${esc(p.currency)} ≠ ${esc(a.currency)}</span>` : '',
-      `<span>${esc(bank?.name || it.app || '?')} · ${esc(timeOf(it.received_at))}</span>`,
-    ].filter(Boolean).join('');
-    return `<div class="rv"><div class="bankdot" aria-hidden="true">${BANK_LOGO[bankOf(it)] ? `<img class="logo" src="${BANK_LOGO[bankOf(it)]}" alt="" width="38" height="38">` : esc((bank?.name || it.app || '?')[0])}</div>
-      <div><div class="what">${what}</div><div class="meta">${meta}</div></div>
-      <div class="acts">${ready ? `<button class="btn sm pri" data-a="acceptInbox" data-id="${it.id}">✓ Approve</button>` : `<button class="btn sm pri" data-a="editInbox" data-id="${it.id}">Review</button>`}
-        ${ready ? `<button class="btn sm" data-a="editInbox" data-id="${it.id}">Edit</button>` : ''}<button class="btn sm ghost" data-a="ignoreInbox" data-id="${it.id}">Dismiss</button></div>
-      <div class="raw" title="Stored text (codes redacted)">“${esc([it.title, it.body].filter(Boolean).join(' · '))}”</div></div>`;
-  }).join('');
-  return `<section class="card tray mb" aria-label="To review"><h2><span class="ttl">To review <span class="count" style="margin:0">${items.length}</span></span>
-    <small>${isDemo() ? 'Sample bank notifications · ' : 'From your phone · '}${ready > 1 ? `<a href="#" data-a="acceptAll">Approve all ${ready} ready</a>` : 'Approve, edit or dismiss each'}</small></h2>
-    ${rows}${items.length > limit ? `<div class="xs faint" style="margin-top:8px"><a href="#tx">See all ${items.length} in Activity</a></div>` : ''}</section>`;
+  return `<section class="card tray" aria-label="To review"><div class="trh"><b>To review</b><span class="count">${items.length}</span><span class="grow"></span>
+    ${ready > 1 ? `<button class="btn sm" data-a="acceptAll">${IC('check-check', 'sm')} Approve ${ready} ready</button>` : ''}</div>
+    <div class="rvlist">${items.slice(0, limit).map(reviewRow).join('')}</div>
+    ${items.length > limit ? `<a class="more" href="#tx">See all ${items.length}</a>` : ''}</section>`;
 }
-
 // ---------- views ----------
 function vHome() {
   const w = worth(), mt = monthTotals(thisMonth()), up = upcoming(14), b = balances(), mon = monthName(thisMonth()).split(' ')[0];
@@ -566,40 +604,45 @@ function vHome() {
   const usedPct = mt.inc ? Math.min(100, (mt.out / mt.inc) * 100) : (mt.out ? 100 : 0);
   const whole = money(w.net).replace(/\.\d\d$/, ''), cents = money(w.net).slice(-3);
   const nm = String(S.user?.user_metadata?.own_names || '').split(',')[0].trim().split(' ')[0] || 'Blu';
-  const accs = activeAccounts().slice().sort((x, y) => (b[y.id] * (rate(y.currency) ?? 0)) - (b[x.id] * (rate(x.currency) ?? 0)));
-  return `<div class="hello"><img class="mark" src="brand/scry-icon.svg" alt=""><div><div class="hi">${hello}</div><div class="nm">${esc(nm)}</div></div><span class="grow"></span>${tagChips()}</div>`
+  const accAll = activeAccounts().slice().sort((x, y) => (b[y.id] * (rate(y.currency) ?? 0)) - (b[x.id] * (rate(x.currency) ?? 0)));
+  const accs = accAll.some(a => Math.abs(b[a.id]) > 0.004) ? accAll.filter(a => Math.abs(b[a.id]) > 0.004) : accAll;
+  const ser = worthSeries(30), moves = Math.max(...ser) - Math.min(...ser) > 0.5;
+  const cardList = (title, link, body) => `<section class="card"><h2>${title} <small>${link}</small></h2>${body}</section>`;
+  const billsBody = up.length ? `<div class="list">${up.slice(0, 4).map(o => billRow(o)).join('')}</div>` : '<div class="empty1">Nothing due in the next two weeks.</div>';
+  const recentBody = recent.length ? `<div class="list">${recent.map(txRow).join('')}</div>` : '<div class="empty1">Nothing logged yet this month.</div>';
+  const pairBR = !up.length && !recent.length
+    ? `<div class="card c12 slim" style="--o:6">${IC('circle-check', 'sm')} Nothing due soon · nothing logged yet</div>`
+    : `<div class="c6" style="--o:5">${cardList('Coming up', '<a href="#bills">All bills</a>', billsBody)}</div><div class="c6" style="--o:7">${cardList('Recent activity', '<a href="#tx">See all</a>', recentBody)}</div>`;
+  const budCard = budRows.length ? cardList('Budgets', '<a href="#budget">See all</a>', budRows.map(r => { const p = r.sp / r.bud; return `<div class="meter"><div class="row"><span>${catIcon(r.c)} ${esc(r.c.name)}</span><span class="grow"></span><span class="mono xs ${p > 1 ? 'neg' : 'muted'}">${money(r.sp)} / ${money(r.bud)}</span></div><div class="bar"><i class="${p > 1 ? 'over' : p > .8 ? 'warn' : ''}" style="width:${Math.min(100, p * 100)}%"></i></div></div>`; }).join('')) : '';
+  const whereCard = byCat.length ? cardList('Where the money went', monthName(thisMonth()), byCat.map(([cid, v]) => { const c = cat(cid); return `<div class="meter"><div class="row"><span>${catIcon(c)} ${esc(c?.name || 'Uncategorised')}</span><span class="grow"></span><span class="mono xs muted">${money(v)}</span></div><div class="bar"><i class="blue" style="width:${(v / maxCat) * 100}%"></i></div></div>`; }).join('')) : '';
+  const pairBW = budCard && whereCard ? `<div class="c6" style="--o:8">${budCard}</div><div class="c6" style="--o:9">${whereCard}</div>` : (budCard || whereCard) ? `<div class="c12" style="--o:8">${budCard || whereCard}</div>` : '';
+  return `<div class="hello only-desk"><div><div class="hi">${hello}</div><div class="nm">${esc(nm)}</div></div></div>`
   + (isDemo() && !S.settings.hideBanner ? `<div class="demo-banner" role="note"><span><b>You're looking at demo data.</b> Every number and notification here is a made-up sample, stored only in this browser.</span><button data-a="hideBanner" aria-label="Hide this note">${IC('x', 'sm')}</button></div>` : '')
-  + `<div class="home-grid"><div class="home-col">
-    <section class="card hero balance"><div class="k">Total balance</div>
+  + `<div class="hg">
+    <section class="card hero balance c7" style="--o:1">
+      <div class="bh"><span class="k">Total balance</span>${tagChips()}</div>
       <div class="v ${w.net < 0 ? 'neg' : ''}">${whole}<small>${cents}</small></div>
       ${w.owe < 0 ? `<span class="chip owe">${IC('trending-down', 'sm')} You owe ${money(-w.owe)}</span>` : `<span class="chip">${IC('shield-check', 'sm')} Nothing owed</span>`}
-      ${w.missing.length ? `<span class="chip owe" style="margin-left:6px">${w.missing.join(', ')} rate not set</span>` : ''}
-      ${sparkline(worthSeries(30))}
+      ${w.missing.length ? `<div class="fine">Excludes ${w.missing.join(', ')} · <a href="#settings">set rate</a></div>` : ''}
+      ${moves ? sparkline(ser) : ''}
+      <div class="hq only-desk"><button class="btn pri" data-a="addTx">${IC('plus', 'sm')} Add</button><button class="btn" data-a="scan">${IC('scan-line', 'sm')} Scan</button><button class="btn" data-a="addTransfer">${IC('arrow-left-right', 'sm')} Transfer</button><a class="btn" href="#bills">${IC('receipt', 'sm')} Pay bill</a></div>
     </section>
-    <div class="quick">
+    <section class="card month c5" style="--o:6"><h2>${mon} so far <small><a href="#tx">Activity</a></small></h2>
+      <div class="trio"><div><div class="xs faint">In</div><div class="mid pos">${money(mt.inc)}</div></div><div><div class="xs faint">Out</div><div class="mid">${money(mt.out)}</div></div><div><div class="xs faint">Left</div><div class="mid ${mt.left < 0 ? 'neg' : ''}">${money(mt.left)}</div></div></div>
+      <div><div class="bar" aria-label="${Math.round(usedPct)}% of income spent"><i class="${usedPct > 95 ? 'over' : usedPct > 80 ? 'warn' : ''}" style="width:${usedPct}%"></i></div>
+      <div class="xs faint" style="margin-top:8px">${mt.inc ? `${Math.round(usedPct)}% of this month's income spent` : 'No income logged yet this month'}</div></div></section>
+    <div class="quick only-phone c12" style="--o:2">
       <button data-a="addTx"><span class="b gold">${IC('plus', 'lg')}</span>Add</button>
       <button data-a="scan"><span class="b">${IC('scan-line')}</span>Scan</button>
       <button data-a="addTransfer"><span class="b">${IC('arrow-left-right')}</span>Transfer</button>
       <a href="#bills"><span class="b">${IC('receipt')}</span>Pay bill</a>
     </div>
-    ${tray(4)}
-    <div class="sechead"><b>Accounts</b><a href="#accounts">See all</a></div>
-    <div class="acc-strip">${accs.map(a => `<div class="acc-tile" data-a="openAccount" data-id="${a.id}" role="button" tabindex="0"><div class="lg">${accIcon(a, 36)}</div><div class="t">${esc(a.name)}</div><div class="m ${b[a.id] < 0 ? 'neg' : ''}">${money(b[a.id], a.currency).replace(/\.00$/, '')}</div></div>`).join('') || '<div class="empty">No accounts yet. <a href="#" data-a="addAccount">Add your first</a></div>'}</div>
-    <div class="sechead"><b>Coming up</b><a href="#bills">All bills</a></div>
-    <section class="card"><div class="list">${up.length ? up.slice(0, 4).map(o => billRow(o)).join('') : '<div class="empty">Nothing due in the next two weeks.</div>'}</div></section>
-  </div>
-  <div class="home-col">
-    <section class="card"><h2>${mon} so far <small><a href="#tx">Activity</a></small></h2>
-      <div class="trio"><div><div class="xs faint">In</div><div class="mid pos">${money(mt.inc)}</div></div><div><div class="xs faint">Out</div><div class="mid">${money(mt.out)}</div></div><div><div class="xs faint">Left</div><div class="mid ${mt.left < 0 ? 'neg' : ''}">${money(mt.left)}</div></div></div>
-      <div class="bar" style="margin-top:14px" aria-label="${Math.round(usedPct)}% of income spent"><i class="${usedPct > 95 ? 'over' : usedPct > 80 ? 'warn' : ''}" style="width:${usedPct}%"></i></div>
-      <div class="xs faint" style="margin-top:6px">${mt.inc ? `${Math.round(usedPct)}% of this month's income spent` : 'No income logged yet this month'}</div></section>
-    <section class="card penny-strip"><span class="penny-dot lg" aria-hidden="true">${IC('sparkles')}</span><div class="grow"><b>Ask Penny</b><div class="xs muted">Your AI accountant. Money questions only.</div></div>
-      <div class="catpick">${PENNY_STARTERS.slice(0, 3).map(q => `<button data-a="pennyAsk" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div></section>
-    <section class="card"><h2>Budgets <small><a href="#budget">See all</a></small></h2>
-      ${budRows.length ? budRows.map(r => { const p = r.sp / r.bud; return `<div class="meter"><div class="row"><span>${catIcon(r.c)} ${esc(r.c.name)}</span><span class="grow"></span><span class="mono xs ${p > 1 ? 'neg' : 'muted'}">${money(r.sp)} / ${money(r.bud)}</span></div><div class="bar"><i class="${p > 1 ? 'over' : p > .8 ? 'warn' : ''}" style="width:${Math.min(100, p * 100)}%"></i></div></div>`; }).join('') : '<div class="empty">No budgets yet. <a href="#budget">Set some</a></div>'}</section>
-    <section class="card"><h2>Recent activity <small><a href="#tx">See all</a></small></h2><div class="list">${recent.map(txRow).join('') || '<div class="empty">Nothing yet. Tap + to add.</div>'}</div></section>
-    ${byCat.length ? `<section class="card"><h2>Where the money went <small>${monthName(thisMonth())}</small></h2>${byCat.map(([cid, v]) => { const c = cat(cid); return `<div class="meter"><div class="row"><span>${catIcon(c)} ${esc(c?.name || 'Uncategorised')}</span><span class="grow"></span><span class="mono xs muted">${money(v)}</span></div><div class="bar"><i class="blue" style="width:${(v / maxCat) * 100}%"></i></div></div>`; }).join('')}</section>` : ''}
-  </div></div>`;
+    ${newInbox().length ? `<div class="only-phone c12" style="--o:3">${reviewStrip()}</div><div class="only-desk c12">${tray(4)}</div>` : ''}
+    <div class="c12" style="--o:4"><div class="sechead"><b>Accounts</b><a href="#accounts">See all</a></div>
+    <div class="acc-strip">${accs.map(a => `<div class="acc-tile" data-a="openAccount" data-id="${a.id}" role="button" tabindex="0"><div class="lg">${accIcon(a, 36)}</div><div class="t">${esc(a.name)}</div><div class="m ${b[a.id] < 0 ? 'neg' : ''}">${money(b[a.id], a.currency).replace(/\.00$/, '')}</div></div>`).join('') || '<div class="empty">No accounts yet. <a href="#" data-a="addAccount">Add your first</a></div>'}</div></div>
+    ${pairBR}
+    ${pairBW}
+  </div>`;
 }
 // Net worth (PHP) at the end of each of the last N days, rebuilt backwards from today's balance.
 function worthSeries(days) {
@@ -789,7 +832,7 @@ function txForm(t = {}, ctx = {}) {
   txCtx = ctx;
   const kind = t.kind || 'expense', accId = t.account_id || activeAccounts()[0]?.id;
   modal(t.id ? 'Edit transaction' : ctx.inboxId ? 'Review notification' : 'Add transaction', `<form class="form" id="txf" data-kind="${kind}" onsubmit="return false">
-    ${ctx.raw ? `<div class="callout xs">“${esc(ctx.raw)}”</div>` : ''}
+
     <div class="seg" data-seg="kind" role="group" aria-label="Type">${[['expense', 'Expense', 'e'], ['income', 'Income', 'i'], ['transfer', 'Transfer', 't']].map(([k, l, c]) => `<button type="button" class="${c} ${kind === k ? 'on' : ''}" data-v="${k}">${l}</button>`).join('')}</div>
     ${amountField('amount', t.amount, curOf(accId))}
     <div id="catBlock"><div class="lbl" style="margin-bottom:6px">Category</div><div class="catpick" id="catpick"></div>
@@ -802,7 +845,8 @@ function txForm(t = {}, ctx = {}) {
     <div class="two"><label class="f">Date<input type="date" name="date" value="${t.date || today()}"></label>
       <div class="f" style="justify-content:flex-end"><div class="quickdates"><button type="button" data-a="setDate" data-v="0">Today</button><button type="button" data-a="setDate" data-v="-1">Yesterday</button></div></div></div>
     ${segTag(t.tag || 'personal')}
-  </form>`, `${t.id ? '<button class="btn danger left" data-a="delTx" data-id="' + t.id + '">Delete</button>' : ''}<button class="btn ghost" data-a="close">Cancel</button><button class="btn pri" id="saveTxBtn" data-a="saveTx" data-id="${t.id || ''}">Save</button>`);
+    ${ctx.raw ? `<details class="orig"><summary>Original notification</summary><div>${esc(ctx.raw)}</div></details>` : ''}
+  </form>`, `${t.id ? '<button class="btn danger left" data-a="delTx" data-id="' + t.id + '">Delete</button>' : ''}${ctx.inboxId ? `<button class="btn ghost left" data-a="ignoreInbox" data-id="${ctx.inboxId}">Dismiss</button>` : `<button class="btn ghost" data-a="close">Cancel</button>`}<button class="btn pri" id="saveTxBtn" data-a="saveTx" data-id="${t.id || ''}">Save</button>`);
   syncTxForm();
 }
 function syncTxForm() {
@@ -817,7 +861,7 @@ function syncTxForm() {
     const sel = f.category_id.value;
     $('#catpick').innerHTML = topCats(kind, 8).map(c => `<button type="button" class="${sel === c.id ? 'on' : ''}" data-a="pickCat" data-id="${c.id}">${catIcon(c)} ${esc(c.name)}</button>`).join('');
   }
-  $('#saveTxBtn').textContent = { expense: 'Save expense', income: 'Save income', transfer: 'Save transfer' }[kind];
+  $('#saveTxBtn').textContent = txCtx?.inboxId ? 'Approve' : { expense: 'Save expense', income: 'Save income', transfer: 'Save transfer' }[kind];
 }
 
 function accountForm(a = {}) {
@@ -936,7 +980,7 @@ function scanCallout(text) {
 function scanStatement(r) {
   const credit = activeAccounts().find(a => a.type === 'credit');
   const already = l => S.d.transactions.some(t => t.date === l.date && Math.abs(num(t.amount) - Math.abs(l.amount)) < 0.005);
-  modal(esc(r.merchant || 'Card statement'), `<div class="callout xs scan-note">${IC('scan-line', 'sm')} ${esc(scanSummary(r))}${r.total ? ` · amount due <b>${money(r.total)}</b>` : ''}${r.due_date ? ` by <b>${shortDate(r.due_date)}</b>` : ''}</div>
+  modal(r.merchant || 'Card statement', `<div class="callout xs scan-note">${IC('scan-line', 'sm')} ${esc(scanSummary(r))}${r.total ? ` · amount due <b>${money(r.total)}</b>` : ''}${r.due_date ? ` by <b>${shortDate(r.due_date)}</b>` : ''}</div>
     <form class="form" id="scanf" onsubmit="return false">
       <label class="f">Add these charges to<select name="account_id">${accOptions(credit?.id)}</select></label>
       <label class="row small muted" style="gap:8px"><input type="checkbox" checked data-a="scanAll"> Select all</label>
@@ -1034,6 +1078,8 @@ const amt = v => num(String(v ?? '').replace(/,/g, ''));
 const A = {
   pennyAsk: el => { if (location.hash !== '#penny') location.hash = 'penny'; pennySend(el.dataset.q); },
   pennySend: () => pennySend($('#pennyIn')?.value),
+  pennyScan: () => pennyScan(),
+  pennySave: el => { const m = S.penny[Number(el.dataset.i)]; if (!m?.scan) return; scanResult = m.scan; m.saved = true; savePenny(); showScan(m.scan); },
   pennyClear: () => { S.penny = []; savePenny(); render(); },
   tag: el => { S.tag = el.dataset.v; render(); },
   month: el => { const k = el.dataset.k; S[k] = shiftMonth(S[k], Number(el.dataset.v)); render(); },
@@ -1126,7 +1172,7 @@ const A = {
     txForm({ kind, amount: p.amount, account_id: a?.id, date, note, category_id: guessCategory(note, kind), tag: 'personal' },
       { inboxId: it.id, raw });
   },
-  async ignoreInbox(el) { await safe(() => DB.update('inbox', el.dataset.id, { status: 'ignored' })); render(); toast('Dismissed. Its text is cleared.'); },
+  async ignoreInbox(el) { await safe(() => DB.update('inbox', el.dataset.id, { status: 'ignored' })); if ($('.modal')) { txCtx = null; closeModal(); } render(); toast('Dismissed. Its text is cleared.'); },
   simulate() {
     const bank = $('#simApp').value, text = $('#simText').value.trim(); if (!text) return;
     const item = { app: BANKS[bank].name, package: bank, title: '', body: text }, s = screenNotification(item);
