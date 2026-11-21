@@ -951,6 +951,22 @@ a,button,[role="button"]{-webkit-touch-callout:none;outline:none}
 body[data-view="penny"] .mhead .brand{visibility:hidden}
 @media (max-width:760px){ .pcomp{bottom:calc(98px + env(safe-area-inset-bottom))} .plog{min-height:calc(100vh - 360px)} }
 .pretry{display:inline-flex;align-items:center;gap:6px;margin-left:6px;padding:4px 10px;border-radius:999px;border:0;background:rgba(255,255,255,.12);color:#fff;font:600 12px var(--body);cursor:pointer}
+/* v31: Penny's prepared entries */
+.pbooks{margin:-4px 0 4px 38px;border-radius:18px;border:1px solid rgba(242,197,124,.28);background:linear-gradient(160deg,rgba(242,197,124,.08),rgba(255,255,255,.02));padding:10px 12px}
+.pb-head{display:flex;align-items:center;gap:6px;font-size:13px;color:#EBD3A0;margin-bottom:4px}
+.pb-all{border:0;border-radius:999px;padding:6px 12px;background:linear-gradient(135deg,var(--gold-1),var(--gold-2));color:var(--on-gold);font:700 12px var(--body);cursor:pointer}
+.pb-row{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid rgba(255,255,255,.07)}
+.pb-row .ic{width:30px;height:30px;border-radius:999px;display:grid;place-items:center;background:rgba(255,255,255,.08)}
+.pb-row[data-tone="income"] .ic{color:#6FE3BC} .pb-row[data-tone="expense"] .ic{color:#F7A896} .pb-row[data-tone="transfer"] .ic{color:#9DB8FF}
+.pb-row[data-tone="bill"] .ic,.pb-row[data-tone="acct"] .ic{color:var(--gold-1)}
+.pb-row b{display:block;font-size:14px} .pb-row small{display:block;font-size:12px;color:var(--faint);line-height:1.35}
+.pb-row .pb-err{color:#FFB4A8} .pb-row .pb-wait{color:#EBD3A0}
+.pb-acts{display:flex;gap:6px}
+.pb-ok,.pb-skip{width:34px;height:34px;border-radius:999px;border:0;display:grid;place-items:center;cursor:pointer}
+.pb-ok{background:var(--ok-bg);color:var(--ok);border:1px solid rgba(63,224,194,.4)} .pb-ok:disabled{opacity:.35}
+.pb-skip{background:rgba(255,255,255,.06);color:var(--muted)}
+.pb-st{font-size:12px;color:var(--faint);display:inline-flex;align-items:center;gap:4px} .pb-row.ok .pb-st{color:var(--ok)}
+.pb-row.skip,.pb-row.ok{opacity:.75}
 </style>
 </head>
 <body>
@@ -959,6 +975,6 @@ body[data-view="penny"] .mhead .brand{visibility:hidden}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
 <script src="config.js?v=3" onerror="void 0"></script>
-<script src="app.js?v=30"></script>
+<script src="app.js?v=31"></script>
 </body>
 </html>

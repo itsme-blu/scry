@@ -484,7 +484,7 @@ function vPenny() {
   const av = `<span class="pav" aria-hidden="true">${IC('sparkles', 'sm')}</span>`;
   const msgs = S.penny.map((m, i) => m.role === 'user'
     ? `<div class="pm2 me"><div class="bub">${m.photo ? `<span class="photo-tag">${IC('camera', 'sm')} Photo</span> ` : ''}${esc(m.content)}</div></div>`
-    : `<div class="pm2 her">${av}<div class="bub ${m.error ? 'err' : ''}">${pennyText(m.content)}${pennySaveBtn(m, i)}</div></div>`).join('');
+    : `<div class="pm2 her">${av}<div class="bub ${m.error ? 'err' : ''}">${pennyText(m.content)}${pennySaveBtn(m, i)}</div></div>${pennyItems(m, i)}`).join('');
   const welcome = `<div class="pwelcome"><span class="pav xl" aria-hidden="true">${IC('sparkles')}</span>
       <h2>Hi Blu, I'm Penny</h2><p>Your accountant in Scry. I see your accounts, spending, budgets and bills, and keep Daybreak's money apart from yours.</p>
       ${isDemo() ? '<p class="warn">In demo mode I\'m asleep: I only work with your live data.</p>' : ''}
@@ -499,6 +499,63 @@ function vPenny() {
     </form>
     <div class="pfine">Uses Claude by Anthropic · not a licensed financial adviser</div>`;
 }
+// ---------- Penny as bookkeeper: her proposed entries, approved by Blu one tap at a time ----------
+const byName = (list, name) => { const n = norm(name); return n ? list.find(x => norm(x.name) === n) || list.find(x => norm(x.name).includes(n) || n.includes(norm(x.name))) : null; };
+function resolveItem(it, pending = []) {                          // turn her names into real ids; anything unknown is reported, not guessed
+  const d = it.d, accs = activeAccounts();
+  if (it.type === 'tx') {
+    const a = byName(accs, d.account), to = d.kind === 'transfer' ? byName(accs, d.to_account) : null;
+    const c = d.kind === 'transfer' ? null : byName(catsOf(d.kind), d.category);
+    const waits = n => pending.some(p => norm(p) === norm(n));
+    const err = !a ? (waits(d.account) ? `Waits for "${d.account}" above` : `No account called "${d.account}"`) : d.kind === 'transfer' && !to ? (waits(d.to_account) ? `Waits for "${d.to_account}" above` : `No account called "${d.to_account}"`) : !(num(d.amount) > 0) ? 'Amount missing' : !/^\d{4}-\d{2}-\d{2}$/.test(d.date) ? 'Date missing' : '';
+    return { err, row: err ? null : { kind: d.kind, amount: Math.abs(num(d.amount)), date: d.date, account_id: a.id, to_account_id: to?.id || null, category_id: c?.id || null, note: d.note || null, tag: d.tag === 'daybreak' ? 'daybreak' : 'personal' } };
+  }
+  if (it.type === 'bill') {
+    const c = byName(catsOf('expense'), d.category), ex = d.update_existing ? byName(S.d.bills.filter(b => b.active), d.name) : null;
+    const err = d.update_existing && !ex ? `No bill called "${d.name}" to update` : !/^\d{4}-\d{2}-\d{2}$/.test(d.due_date) ? 'Due date missing' : '';
+    return { err, ex, row: err ? null : { name: d.name, amount: num(d.amount), due_date: d.due_date, repeat: d.repeat || 'monthly', category_id: c?.id || ex?.category_id || null, note: d.note || ex?.note || null, tag: ex?.tag || 'personal', active: true, autopay: ex?.autopay || false } };
+  }
+  const dup = byName(accs, d.name);
+  return { err: dup && norm(dup.name) === norm(d.name) ? `You already have "${dup.name}"` : '', row: { name: d.name, type: d.type, currency: (d.currency || 'PHP').toUpperCase().slice(0, 3), opening_balance: num(d.opening_balance), sort: S.d.accounts.length + 1 } };
+}
+function itemLine(it) {
+  const d = it.d;
+  if (it.type === 'tx') {
+    const a = byName(activeAccounts(), d.account), cur = a?.currency || 'PHP';
+    const head = { expense: 'Expense', income: 'Income', transfer: 'Transfer' }[d.kind] || 'Entry';
+    const where = d.kind === 'transfer' ? `${esc(d.account)} → ${esc(d.to_account)}` : `${esc(d.account)}${d.category ? ' · ' + esc(d.category) : ''}`;
+    return { ic: d.kind === 'income' ? 'arrow-down-left' : d.kind === 'transfer' ? 'arrow-left-right' : 'arrow-up-right', tone: d.kind,
+      t: `${head} ${d.kind === 'income' ? '+' : d.kind === 'expense' ? '−' : ''}${money(Math.abs(num(d.amount)), cur)}`, s: `${where} · ${esc(shortDate(d.date))}${d.note ? ' · ' + esc(d.note) : ''}${d.tag === 'daybreak' ? ' · Daybreak' : ''}` };
+  }
+  if (it.type === 'bill') return { ic: 'receipt', tone: 'bill', t: `${d.update_existing ? 'Update bill' : 'New bill'} · ${esc(d.name)} ${money(num(d.amount))}`, s: `${esc(d.repeat === 'none' ? 'One-off' : d.repeat)} · due ${esc(d.due_date ? shortDate(d.due_date) : '?')}${d.note ? ' · ' + esc(d.note) : ''}` };
+  return { ic: d.type === 'loan' || num(d.opening_balance) < 0 ? 'landmark' : 'wallet', tone: 'acct', t: `New account · ${esc(d.name)}`, s: `${esc(ACCOUNT_TYPES[d.type]?.[0] || d.type)} · starts at ${money(num(d.opening_balance), (d.currency || 'PHP').toUpperCase())}${d.note ? ' · ' + esc(d.note) : ''}` };
+}
+function pennyItems(m, i) {
+  if (!m.items?.length) return '';
+  const open = m.items.filter(x => x.st === 'new').length;
+  return `<div class="pbooks"><div class="pb-head">${IC('book-open-check', 'sm')} <b>Prepared for your books</b><span class="grow"></span>${open > 1 ? `<button class="pb-all" data-a="pbAll" data-i="${i}">Approve all ${open}</button>` : ''}</div>
+    ${m.items.map((it, j) => { const L = itemLine(it), chk = it.st === 'new' ? resolveItem(it, m.items.filter(x => x.type === 'acct' && x.st === 'new').map(x => x.d.name)) : null; return `<div class="pb-row ${it.st}" data-tone="${L.tone}"><span class="ic">${IC(L.ic, 'sm')}</span>
+      <span class="main"><b>${L.t}</b><small>${L.s}</small>${chk?.err ? `<small class="${chk.err.startsWith('Waits') ? 'pb-wait' : 'pb-err'}">${esc(chk.err)}</small>` : ''}${it.st === 'fail' ? `<small class="pb-err">${esc(it.msg || 'Could not save')}</small>` : ''}</span>
+      ${it.st === 'new' ? `<span class="pb-acts"><button class="pb-skip" data-a="pbSkip" data-i="${i}" data-j="${j}" aria-label="Skip">${IC('x', 'sm')}</button><button class="pb-ok" data-a="pbOk" data-i="${i}" data-j="${j}" ${chk?.err ? 'disabled' : ''} aria-label="Approve">${IC('check', 'sm')}</button></span>`
+        : `<span class="pb-st">${it.st === 'ok' ? `${IC('check', 'sm')} Saved` : it.st === 'skip' ? 'Skipped' : 'Not saved'}</span>`}</div>`; }).join('')}</div>`;
+}
+async function pbApprove(i, j) {
+  const it = S.penny[i]?.items?.[j]; if (!it || it.st !== 'new') return;
+  const { err, row, ex } = resolveItem(it);
+  if (err) { it.st = 'fail'; it.msg = err; return; }
+  try {
+    if (it.type === 'tx') await DB.insert('transactions', row);
+    else if (it.type === 'bill') ex ? await DB.update('bills', ex.id, row) : await DB.insert('bills', row);
+    else await DB.insert('accounts', row);
+    it.st = 'ok';
+  } catch (e) { it.st = 'fail'; it.msg = e.message || 'Could not save'; }
+}
+async function pbApproveAll(i) {
+  const items = S.penny[i]?.items || [], order = { acct: 0, bill: 1, tx: 2 };   // accounts first, so entries can point at them
+  for (const j of items.map((x, j) => j).sort((a, b) => order[items[a].type] - order[items[b].type])) await pbApprove(i, j);
+  savePenny(); render(); toast(`${items.filter(x => x.st === 'ok').length} saved to your books`);
+}
+
 // A scanned photo's details ride on Penny's reply so Blu can save them with one tap.
 function pennySaveBtn(m, i) {
   const r = m.scan; if (!r || m.saved || !['receipt', 'card_slip', 'bill', 'card_statement'].includes(r.doc_type) || !(r.total || r.lines?.length)) return '';
@@ -523,7 +580,8 @@ async function pennySend(q, image) {
   const cats = S.d.categories.filter(c => !c.archived && c.kind === 'expense').map(c => c.name);
   const scanP = image ? S.sb.functions.invoke('scan', { body: { image, media_type: 'image/jpeg', categories: cats, today: today() } }).then(x => x.data).catch(() => null) : Promise.resolve(null);
   try {
-    const history = S.penny.filter(m => !m.error).map(({ role, content, photo }) => ({ role, content: photo ? `[Blu showed you a photo here] ${content}` : content }));
+    const history = S.penny.filter(m => !m.error).map(({ role, content, photo, items }) => ({ role, content: (photo ? `[Blu showed you a photo here] ${content}` : content)
+      + (items?.length ? `\n\n[Entries you prepared: ${items.map(x => `${x.type === 'tx' ? `${x.d.kind} ${x.d.amount} ${x.d.account}${x.d.to_account ? '→' + x.d.to_account : ''} ${x.d.date}` : x.d.name} = ${x.st === 'ok' ? 'APPROVED and saved' : x.st === 'skip' ? 'skipped by Blu' : x.st === 'fail' ? 'failed to save' : 'still waiting'}`).join('; ')}]` : '') }));
     const { data, error } = await S.sb.functions.invoke('penny', {
       body: { messages: history, image: image || undefined, today: today(), rates: S.settings.rates },
     });
@@ -534,7 +592,9 @@ async function pennySend(q, image) {
       msg ||= 'Penny couldn\'t answer right now. Try again in a moment.';
     }
     const scan = await scanP;
-    S.penny.push({ role: 'assistant', content: msg || 'No answer came back.', error: isErr, scan: !isErr && scan && !scan.error ? scan : undefined });
+    const items = isErr ? [] : (data?.proposals || []).flatMap(p => p.tool === 'propose_transactions' ? (p.input?.entries || []).map(e => ({ type: 'tx', d: e, st: 'new' }))
+      : p.tool === 'propose_bill' ? [{ type: 'bill', d: p.input, st: 'new' }] : p.tool === 'propose_account' ? [{ type: 'acct', d: p.input, st: 'new' }] : []);
+    S.penny.push({ role: 'assistant', content: msg || 'No answer came back.', error: isErr, scan: !isErr && scan && !scan.error ? scan : undefined, items: items.length ? items : undefined });
   } catch (e) {
     S.penny.push({ role: 'assistant', content: 'Penny couldn\'t be reached. Check your internet and try again.', error: true });
   }
@@ -1392,6 +1452,9 @@ const A = {
   pennyScan: () => pennyScan(),
   pennySave: el => { const m = S.penny[Number(el.dataset.i)]; if (!m?.scan) return; scanResult = m.scan; m.saved = true; savePenny(); showScan(m.scan); },
   pennyClear: () => { S.penny = []; savePenny(); render(); },
+  pbOk: async el => { await pbApprove(+el.dataset.i, +el.dataset.j); savePenny(); render(); },
+  pbSkip: el => { const it = S.penny[+el.dataset.i]?.items?.[+el.dataset.j]; if (it) it.st = 'skip'; savePenny(); render(); },
+  pbAll: el => pbApproveAll(+el.dataset.i),
   pennyRetry: () => { const q = S.penny.pop(); savePenny(); pennySend(q.content); },
   tag: el => { S.tag = el.dataset.v; render(); },
   month: el => { const k = el.dataset.k; S[k] = shiftMonth(S[k], Number(el.dataset.v)); render(); },
