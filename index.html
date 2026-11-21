@@ -683,6 +683,12 @@ details.orig div{margin-top:8px;padding:10px 12px;border-radius:14px;background:
   .summ .sblk{flex:none!important;min-height:0}
   .summ .sblk .k{margin-top:44px}
 }
+/* v16: calm down the cards: no blown-up logo watermarks, no cash pocket shape */
+.bcard .wm{display:none}
+.bcard[data-brand="cash"]::after{display:none}
+.bcard[data-brand="cash"]{background:linear-gradient(135deg,#2E7D5B,#1B5A40 60%,#123F2D)}
+.bcard::before{background:linear-gradient(115deg,rgba(255,255,255,.16) 0%,rgba(255,255,255,0) 38%),radial-gradient(140% 90% at 100% 100%,rgba(0,0,0,.22),transparent 60%)}
+.bcard .lg{background:transparent;box-shadow:none;width:26px;height:26px;border-radius:7px;overflow:hidden}
 </style>
 </head>
 <body>
@@ -691,6 +697,6 @@ details.orig div{margin-top:8px;padding:10px 12px;border-radius:14px;background:
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
 <script src="config.js?v=3" onerror="void 0"></script>
-<script src="app.js?v=15"></script>
+<script src="app.js?v=16"></script>
 </body>
 </html>
