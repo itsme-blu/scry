@@ -8,7 +8,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 const num = v => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 const nf2 = new Intl.NumberFormat('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const SYM = { PHP: '₱', USD: 'US$', SGD: 'S$', EUR: '€', GBP: '£', AUD: 'A$', CAD: 'C$' };
-const money = (n, cur = 'PHP') => (n < 0 ? '−' : '') + (SYM[cur] || cur + ' ') + nf2.format(Math.abs(n || 0));
+const money = (n, cur = 'PHP') => window.__hideAmt ? (SYM[cur] || cur + ' ') + '••••' : (n < 0 ? '−' : '') + (SYM[cur] || cur + ' ') + nf2.format(Math.abs(n || 0));
 const signed = (n, cur) => (n > 0 ? '+' : '') + money(n, cur);
 const pad = n => String(n).padStart(2, '0');
 const iso = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -423,7 +423,7 @@ async function seedDemo() {
 // Lucide icons (lucide@0.460.0, loaded in index.html); drawn into <i data-lucide> after each render.
 const IC = (name, cls = '') => `<i data-lucide="${name}" class="lc ${cls}" aria-hidden="true"></i>`;
 const drawIcons = () => { try { window.lucide?.createIcons(); } catch { /* icons are decoration only */ } };
-const NAV = [['home', 'Home', 'house'], ['tx', 'Activity', 'activity'], ['budget', 'Budgets', 'pie-chart'], ['bills', 'Bills', 'calendar-days'], ['accounts', 'Accounts', 'wallet']];
+const NAV = [['home', 'Home', 'house'], ['tx', 'Activity', 'activity'], ['budget', 'Budgets', 'pie-chart'], ['bills', 'Bills', 'calendar-days'], ['accounts', 'Wallet', 'wallet']];
 function navCounts() { return { home: newInbox().length, tx: 0, bills: overdueBills().length }; }
 function shell() {
   return `<div class="shell">
@@ -441,12 +441,12 @@ function renderNav() {
   $('#railnav').innerHTML = NAV.map(link).join('') + `<a href="#penny" class="penny-link ${S.view === 'penny' ? 'on' : ''}"><span class="ni">${IC('sparkles')}</span>Ask Penny</a>`
     + '<div class="sep"></div>' + link(['settings', 'Settings', 'settings']);
   const tab = k => link(NAV.find(n => n[0] === k));
-  $('#tabnav').innerHTML = tab('home') + tab('tx') + `<button class="tab-add" data-a="addSheet" aria-label="Add">${IC('plus', 'lg')}</button>` + tab('bills') + tab('budget');
+  $('#tabnav').innerHTML = tab('home') + tab('tx') + `<button class="tab-add" data-a="addSheet" aria-label="Add">${IC('plus', 'lg')}</button>` + tab('bills') + tab('accounts');
 }
 function mhead() {
   const hr = new Date().getHours(), hi = hr < 12 ? 'Good morning' : hr < 18 ? 'Good afternoon' : 'Good evening';
   const nm = String(S.user?.user_metadata?.own_names || '').split(',')[0].trim().split(' ')[0] || 'Blu';
-  const brand = S.view === 'home' ? `<div class="brand greet"><img class="mark" src="brand/scry-icon.svg" alt=""><div><div class="hi">${hi}</div><div class="nm">${esc(nm)}</div></div></div>` : `<div class="brand"><img class="mark" src="brand/scry-icon.svg" alt="">Scry</div>`;
+  const brand = S.view === 'home' ? `<div class="brand greet"><div><div class="hi cap">${new Date().toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric' })}</div><div class="nm">Hello, ${esc(nm)}!</div></div></div>` : `<div class="brand"><img class="mark" src="brand/scry-icon.svg" alt="">Scry</div>`;
   return `<div class="mhead">${brand}${isDemo() ? '<span class="demo-pill">Demo</span>' : ''}
     <a href="#penny" class="gear penny-btn ${S.view === 'penny' ? 'on' : ''}" aria-label="Ask Penny, your AI accountant" style="color:var(--gold-1)">${IC('sparkles')}</a>
     <a href="#settings" class="gear ${S.view === 'settings' ? 'on' : ''}" aria-label="Settings">${IC('settings')}</a></div>`;
@@ -455,7 +455,7 @@ function render() {
   if (!$('#main')) $('#root').innerHTML = shell();
   renderNav();
   const V = { home: vHome, tx: vTx, budget: vBudget, bills: vBills, accounts: vAccounts, settings: vSettings, penny: vPenny }[S.view] || vHome;
-  document.body.dataset.view = S.view;
+  document.body.dataset.view = S.view; window.__hideAmt = !!S.settings.hideAmounts;
   $('#main').innerHTML = mhead() + V();
   drawIcons();
   if (S.view === 'penny') { const log = $('#pennyLog'); if (log) log.scrollTop = log.scrollHeight; }
@@ -603,62 +603,60 @@ function tray(limit) {
     ${items.length > limit ? `<a class="more" href="#tx">See all ${items.length}</a>` : ''}</section>`;
 }
 // ---------- views ----------
+const CAT_ICON = { 'food & groceries': 'shopping-cart', 'dining out': 'utensils', transport: 'car', utilities: 'lightbulb', 'phone & internet': 'wifi', 'rent & home': 'house', health: 'heart-pulse', 'family support': 'users', shopping: 'shopping-bag', subscriptions: 'repeat', education: 'book-open', 'personal care': 'sparkles', entertainment: 'film', fees: 'receipt', 'business': 'briefcase', gifts: 'gift', travel: 'plane', insurance: 'shield', savings: 'piggy-bank' };
+const catLucide = c => CAT_ICON[String(c?.name || '').toLowerCase()] || 'tag';
+// One account as a bank card. Brand colours come from the bank; no card numbers, real or fake.
+function bankCard(a, bal) {
+  const brand = a.bank || (a.type === 'cash' ? 'cash' : a.type === 'credit' ? 'credit' : 'other');
+  const logo = (a.bank && BANK_LOGO[a.bank]) || null;
+  return `<div class="bcard" data-brand="${brand}" data-a="cardMenu" data-id="${a.id}" role="button" tabindex="0" aria-label="${esc(a.name)}, ${money(bal, a.currency)}">
+    ${logo ? `<img class="wm" src="${logo}" alt="">` : ''}
+    <div class="top"><span class="lg">${accIcon(a, 30)}</span><span class="nm">${esc(a.name)}</span></div>
+    <span class="chip" aria-hidden="true"></span>
+    <div class="bot"><div class="k">Balance</div><div class="m ${bal < 0 ? 'neg' : ''}">${money(bal, a.currency)}</div></div></div>`;
+}
 function vHome() {
-  const w = worth(), mt = monthTotals(thisMonth()), up = upcoming(45), b = balances(), mon = monthName(thisMonth()).split(' ')[0];
-  const hr = new Date().getHours(), hello = hr < 12 ? 'Good morning' : hr < 18 ? 'Good afternoon' : 'Good evening';
-  const spent = spentByCat(thisMonth(), false);
-  const budRows = catsOf('expense').map(c => ({ c, bud: num(budgetFor(thisMonth(), c.id)?.amount), sp: spent[c.id] || 0 }))
-    .filter(r => r.bud > 0).sort((x, y) => y.sp / y.bud - x.sp / x.bud).slice(0, 5);
-  const byCat = Object.entries(spentByCat(thisMonth())).sort((a, b) => b[1] - a[1]).slice(0, 6), maxCat = byCat[0]?.[1] || 1;
-  const recent = S.d.transactions.filter(tagOK).sort((a, b) => b.date.localeCompare(a.date) || (b.created_at || '').localeCompare(a.created_at || '')).slice(0, 4);
-  const usedPct = mt.inc ? Math.min(100, (mt.out / mt.inc) * 100) : (mt.out ? 100 : 0);
-  const whole = money(w.net).replace(/\.\d\d$/, ''), cents = money(w.net).slice(-3);
+  const w = worth(), mt = monthTotals(thisMonth()), up = upcoming(45), b = balances();
   const nm = String(S.user?.user_metadata?.own_names || '').split(',')[0].trim().split(' ')[0] || 'Blu';
-  const accAll = activeAccounts().slice().sort((x, y) => (b[y.id] * (rate(y.currency) ?? 0)) - (b[x.id] * (rate(x.currency) ?? 0)));
-  const accs = accAll.some(a => Math.abs(b[a.id]) > 0.004) ? accAll.filter(a => Math.abs(b[a.id]) > 0.004) : accAll;
-  const ser = worthSeries(30), moves = Math.max(...ser) - Math.min(...ser) > 0.5;
-  const cardList = (title, link, body) => `<section class="card"><h2>${title} <small>${link}</small></h2>${body}</section>`;
-  const billsBody = up.length ? `<div class="list">${up.slice(0, 4).map(o => billRow(o)).join('')}</div>` : '<div class="empty1">Nothing due in the next 45 days.</div>';
-  const recentBody = recent.length ? `<div class="list">${recent.map(txRow).join('')}</div>` : '<div class="empty1">Nothing logged yet this month.</div>';
-  const pairBR = !up.length && !recent.length
-    ? `<div class="card c12 slim" style="--o:6">${IC('circle-check', 'sm')} Nothing due soon · nothing logged yet</div>`
-    : !up.length || !recent.length ? `<div class="c12" style="--o:${up.length ? 5 : 4}">${up.length ? cardList('Coming up', '<a href="#bills">All bills</a>', billsBody) : cardList('Recent activity', '<a href="#tx">See all</a>', recentBody)}</div>`
-    : `<div class="c6" style="--o:5">${cardList('Coming up', '<a href="#bills">All bills</a>', billsBody)}</div><div class="c6" style="--o:4">${cardList('Recent activity', '<a href="#tx">See all</a>', recentBody)}</div>`;
-  const budCard = budRows.length ? cardList('Budgets', '<a href="#budget">See all</a>', budRows.map(r => { const p = r.sp / r.bud; return `<div class="meter"><div class="row"><span>${catIcon(r.c)} ${esc(r.c.name)}</span><span class="grow"></span><span class="mono xs ${p > 1 ? 'neg' : 'muted'}">${money(r.sp)} / ${money(r.bud)}</span></div><div class="bar"><i class="${p > 1 ? 'over' : p > .8 ? 'warn' : ''}" style="width:${Math.min(100, p * 100)}%"></i></div></div>`; }).join('')) : '';
-  const whereCard = byCat.length ? cardList('Where the money went', monthName(thisMonth()), byCat.map(([cid, v]) => { const c = cat(cid); return `<div class="meter"><div class="row"><span>${catIcon(c)} ${esc(c?.name || 'Uncategorised')}</span><span class="grow"></span><span class="mono xs muted">${money(v)}</span></div><div class="bar"><i class="blue" style="width:${(v / maxCat) * 100}%"></i></div></div>`; }).join('')) : '';
-  const pairBW = budCard && whereCard ? `<div class="c6" style="--o:8">${budCard}</div><div class="c6" style="--o:9">${whereCard}</div>` : (budCard || whereCard) ? `<div class="c12" style="--o:8">${budCard || whereCard}</div>` : '';
-  return `<div class="hello only-desk"><div><div class="hi">${hello}</div><div class="nm">${esc(nm)}</div></div></div>`
+  const hidden = !!S.settings.hideAmounts;
+  const whole = hidden ? money(w.net) : money(w.net).replace(/\.\d\d$/, ''), cents = hidden ? '' : money(w.net).slice(-3);
+  const accAll = activeAccounts().slice().sort((x, y) => (b[x.id] * (rate(x.currency) ?? 0)) - (b[y.id] * (rate(y.currency) ?? 0)));
+  const accs = accAll.some(a => Math.abs(b[a.id]) > 0.004) ? accAll.filter(a => Math.abs(b[a.id]) > 0.004) : accAll;   // smallest first, biggest in front
+  const recent = S.d.transactions.filter(tagOK).sort((x, y) => y.date.localeCompare(x.date) || (y.created_at || '').localeCompare(x.created_at || '')).slice(0, 4);
+  const mtx = txInMonth(thisMonth()).filter(tagOK), nIn = mtx.filter(t => t.kind === 'income').length, nOut = mtx.filter(t => t.kind === 'expense').length;
+  const tot = mt.inc + mt.out, pIn = tot ? Math.round(mt.inc / tot * 100) : 0, pOut = tot ? 100 - pIn : 0;
+  const nBud = S.d.budgets.filter(x => x.month.startsWith(thisMonth()) && num(x.amount) > 0).length;
+  const quick = topCats('expense', 4);
+  const plural = (n, w1) => `${n} ${w1}${n === 1 ? '' : 's'}`;
+  return `<div class="hello only-desk"><div class="hi cap">${new Date().toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric' })}</div><div class="nm">Hello, ${esc(nm)}!</div></div>`
   + (isDemo() && !S.settings.hideBanner ? `<div class="demo-banner" role="note"><span><b>You're looking at demo data.</b> Every number and notification here is a made-up sample, stored only in this browser.</span><button data-a="hideBanner" aria-label="Hide this note">${IC('x', 'sm')}</button></div>` : '')
   + `<div class="hg">
     <section class="card hero balance c7" style="--o:1">
-      <div class="bh"><span class="k">Total balance</span>${tagChips()}</div>
+      <div class="bh"><span class="cap k">Total balance</span><span class="grow"></span>
+        <button class="eye" data-a="toggleHide" aria-label="${hidden ? 'Show amounts' : 'Hide amounts'}" aria-pressed="${hidden}">${IC(hidden ? 'eye-off' : 'eye', 'sm')}</button></div>
       <div class="v ${w.net < 0 ? 'neg' : ''}">${whole}<small>${cents}</small></div>
-      ${w.owe < 0 ? `<span class="chip owe">${IC('trending-down', 'sm')} You owe ${money(-w.owe)}</span>` : `<span class="chip">${IC('shield-check', 'sm')} Nothing owed</span>`}
+      <div class="bfoot">${w.owe < 0 ? `<span class="chip owe">${IC('trending-down', 'sm')} You owe ${money(-w.owe)}</span>` : `<span class="chip">${IC('shield-check', 'sm')} Nothing owed</span>`}${tagChips()}</div>
       ${w.missing.length ? `<div class="fine">Excludes ${w.missing.join(', ')} · <a href="#settings">set rate</a></div>` : ''}
-      ${moves ? sparkline(ser) : ''}
       <div class="hq only-desk"><button class="btn pri" data-a="addTx">${IC('plus', 'sm')} Add</button><button class="btn" data-a="scan">${IC('scan-line', 'sm')} Scan</button><button class="btn" data-a="addTransfer">${IC('arrow-left-right', 'sm')} Transfer</button><a class="btn" href="#bills">${IC('receipt', 'sm')} Pay bill</a></div>
     </section>
-    <section class="card month c5" style="--o:6"><h2>${mon} so far <small><a href="#tx">Activity</a></small></h2>
-      <div class="mrows"><div><span>Money in</span><b class="pos">${money(mt.inc)}</b></div><div><span>Money out</span><b>${money(mt.out)}</b></div><div><span>Left</span><b class="${mt.left < 0 ? 'neg' : ''}">${money(mt.left)}</b></div></div>
-      <div><div class="bar" aria-label="${Math.round(usedPct)}% of income spent"><i class="${usedPct > 95 ? 'over' : usedPct > 80 ? 'warn' : ''}" style="width:${usedPct}%"></i></div>
-      <div class="xs faint" style="margin-top:8px">${mt.inc ? `${Math.round(usedPct)}% of this month's income spent` : 'No income logged yet this month'}</div></div></section>
-    <div class="quick only-phone c12" style="--o:2">
-      <button data-a="addTx"><span class="b gold">${IC('plus', 'lg')}</span>Add</button>
-      <button data-a="scan"><span class="b">${IC('scan-line')}</span>Scan</button>
-      <button data-a="addTransfer"><span class="b">${IC('arrow-left-right')}</span>Transfer</button>
-      <a href="#bills"><span class="b">${IC('receipt')}</span>Pay bill</a>
-    </div>
+    <section class="card summ c5" style="--o:5">
+      <div class="sh"><b class="cap">Summary</b><span class="pill">This month</span><span class="grow"></span><a href="#tx" class="xs">Activity</a></div>
+      <div class="sblk inc" style="flex:${Math.max(pIn, 30)}"><span class="ic">${IC('arrow-down-left')}</span>${tot ? `<span class="pct">${pIn}%</span>` : ''}<div class="k cap">Income</div><div class="v">${money(mt.inc)}</div><div class="n">${plural(nIn, 'transaction')}</div></div>
+      <div class="sblk exp" style="flex:${Math.max(pOut, 30)}"><span class="ic">${IC('arrow-up-right')}</span>${tot ? `<span class="pct">${pOut}%</span>` : ''}<div class="k cap">Expenses</div><div class="v">${money(mt.out)}</div><div class="n">${plural(nOut, 'transaction')}</div></div>
+      <div class="net"><div><div class="k cap">Net cash flow</div><div class="v ${mt.left < 0 ? 'neg' : 'pos'}">${money(mt.left)}</div></div></div>
+    </section>
     ${newInbox().length ? `<div class="only-phone c12" style="--o:2">${reviewStrip()}</div><div class="only-desk c12">${tray(4)}</div>` : ''}
-    <section class="card acc-list only-phone c12" style="--o:3"><h2>Accounts <small><a href="#accounts">See all</a></small></h2>
-      ${accs.map(a => `<div class="arow" data-a="openAccount" data-id="${a.id}" role="button" tabindex="0"><div class="lg">${accIcon(a, 40)}</div><div class="main"><div class="t">${esc(a.name)}</div><div class="s">${ACCOUNT_TYPES[a.type]?.[0] || ''}</div></div><div class="amt ${b[a.id] < 0 ? 'neg' : ''}">${money(b[a.id], a.currency)}</div></div>`).join('') || '<div class="empty1">No accounts yet. <a href="#" data-a="addAccount">Add your first</a></div>'}
-      ${accAll.length > accs.length ? `<a class="more" href="#accounts">${accAll.length - accs.length} more with nothing in them</a>` : ''}</section>
-    <div class="c12 only-desk"><div class="sechead"><b>Accounts</b><a href="#accounts">See all</a></div>
-    <div class="acc-strip cards">${accs.map(a => `<div class="bcard" data-brand="${a.bank || (a.type === 'cash' ? 'cash' : 'other')}" data-a="openAccount" data-id="${a.id}" role="button" tabindex="0" aria-label="${esc(a.name)}, ${money(b[a.id], a.currency)}">
-      <div class="top"><span class="lg">${accIcon(a, 34)}</span><span class="ty">${ACCOUNT_TYPES[a.type]?.[0] || ''}</span></div>
-      <span class="chip" aria-hidden="true"></span>
-      <div class="bot"><div class="t">${esc(a.name)}</div><div class="m">${money(b[a.id], a.currency)}</div></div></div>`).join('') || '<div class="empty">No accounts yet. <a href="#" data-a="addAccount">Add your first</a></div>'}</div></div>
-    ${pairBR}
-    ${pairBW}
+    <div class="c12 only-phone" style="--o:3">
+      <div class="wstack">${accs.map(a => bankCard(a, b[a.id])).join('')}</div>
+      <a class="wlink" href="#accounts">${accAll.length} account${accAll.length === 1 ? '' : 's'} in your wallet ${IC('chevron-right', 'sm')}</a>
+    </div>
+    <div class="c12 only-desk"><div class="sechead"><b class="cap">Wallet</b><a href="#accounts">See all</a></div>
+      <div class="cardgrid">${accs.slice().reverse().map(a => bankCard(a, b[a.id])).join('')}</div></div>
+    ${quick.length ? `<div class="qcats c12" style="--o:4">${quick.map(c => `<button data-a="quickCat" data-id="${c.id}"><span>${IC(catLucide(c))}</span><b>${esc(c.name.split(/[ &]/)[0])}</b></button>`).join('')}</div>` : ''}
+    <a class="rowlink c12" style="--o:6" href="#budget"><span><b>${nBud ? 'Budgets' : 'Set budgets'}</b>${nBud ? `<small>${nBud} set for ${monthName(thisMonth()).split(' ')[0]}</small>` : '<small>Give every peso a job</small>'}</span>${IC('chevron-right')}</a>
+    <div class="${recent.length ? 'c6' : 'c12'}" style="--o:7"><section class="card"><div class="sh"><b class="cap">Upcoming</b><span class="grow"></span><a href="#bills" class="xs">All bills</a></div>
+      ${up.length ? `<div class="list">${up.slice(0, 4).map(o => billRow(o)).join('')}</div>` : '<div class="empty1">Nothing due in the next 45 days.</div>'}</section></div>
+    ${recent.length ? `<div class="c6" style="--o:8"><section class="card"><div class="sh"><b class="cap">Recent</b><span class="grow"></span><a href="#tx" class="xs">See all</a></div><div class="list">${recent.map(txRow).join('')}</div></section></div>` : ''}
   </div>`;
 }
 // Net worth (PHP) at the end of each of the last N days, rebuilt backwards from today's balance.
@@ -762,19 +760,14 @@ function calendar() {
 
 function vAccounts() {
   const b = balances(), w = worth();
-  return ph('Accounts', 'Your accounts', 'Tap Match now and then to line Scry up with your bank app', '<button class="btn pri" data-a="addAccount">+ Add account</button>')
-  + `<div class="grid g3 mb acc-sum">
-    <div class="card"><div class="lbl">What I own</div><div class="mid pos">${money(w.own)}</div></div>
-    <div class="card"><div class="lbl">What I owe</div><div class="mid ${w.owe < 0 ? 'neg' : ''}">${money(-w.owe)}</div></div>
-    <div class="card hero"><div class="lbl">Net worth</div><div class="mid">${money(w.net)}</div>${w.missing.length ? `<div class="xs warn">Not counted: ${w.missing.join(', ')} (set rate in Settings)</div>` : ''}</div></div>
-  <div class="acc-groups">${(() => { const groups = ACCOUNT_GROUPS.filter(([, types]) => activeAccounts().some(a => types.includes(a.type))); return groups; })().map(([title, types], gi, groups) => {
-    const list = activeAccounts().filter(a => types.includes(a.type));
-    const sub = list.reduce((s, a) => s + b[a.id] * (rate(a.currency) ?? 0), 0);
-    const lastOdd = groups.length % 2 === 1 && gi === groups.length - 1;   // fill the row, no empty half
-    return `<section class="card ${lastOdd ? 'span2' : ''}"><h2>${title} <small class="mono">${money(sub)}</small></h2><div class="list">${list.map(a => `<div class="item click" data-a="openAccount" data-id="${a.id}" role="button" tabindex="0"><div class="ico">${accIcon(a)}</div>
-      <div class="main"><div class="t">${esc(a.name)}</div><div class="s">${ACCOUNT_TYPES[a.type]?.[0]}${a.currency !== 'PHP' ? ' · ' + esc(a.currency) : ''}${a.bank && BANKS[a.bank] ? ' · auto' : ''} · ${matchedLabel(a.id)}</div></div>
-      <div class="amt ${b[a.id] < 0 ? 'neg' : ''}">${money(b[a.id], a.currency)}</div><button class="btn sm" data-a="matchAccount" data-id="${a.id}" aria-label="Match ${esc(a.name)} to your real balance">${IC('scale', 'sm')}<span class="t">Match</span></button><button class="btn sm ghost" data-a="editAccount" data-id="${a.id}" aria-label="Edit ${esc(a.name)}">${IC('pencil', 'sm')}</button></div>`).join('')}</div></section>`;
-  }).join('') || '<section class="card span2"><div class="empty">No accounts yet. Add GoTyme, MariBank, GCash, Wise and Cash to start.</div></section>'}</div>`;
+  const list = activeAccounts().slice().sort((x, y) => (b[y.id] * (rate(y.currency) ?? 0)) - (b[x.id] * (rate(x.currency) ?? 0)));
+  return ph('Wallet', 'Wallet', 'Tap a card to see its activity or match it to your bank app', '<button class="btn pri" data-a="addAccount">+ Add account</button>')
+  + `<section class="card hero networth mb"><div class="bh"><span class="cap k">Net worth</span><span class="grow"></span><button class="eye" data-a="toggleHide" aria-label="Hide or show amounts">${IC(S.settings.hideAmounts ? 'eye-off' : 'eye', 'sm')}</button></div>
+    <div class="v">${money(w.net)}</div>
+    <div class="nw2"><div><span>Assets</span><b>${money(w.own)}</b></div><div><span>Liabilities</span><b>${money(-w.owe)}</b></div></div>
+    ${w.missing.length ? `<div class="fine">Not counted: ${w.missing.join(', ')} · <a href="#settings">set rate</a></div>` : ''}</section>
+  <div class="cardgrid wallet">${list.map(a => bankCard(a, b[a.id])).join('')}
+    <button class="bcard addcard" data-a="addAccount">${IC('plus', 'lg')}<span>Add account</span></button></div>`;
 }
 
 function vSettings() {
@@ -1191,7 +1184,7 @@ const A = {
   },
   async delTx(el) { if (!confirm('Delete this transaction?')) return; await safe(() => DB.remove('transactions', el.dataset.id)); closeModal(); render(); },
   addAccount: () => accountForm(),
-  editAccount: el => accountForm(acc(el.dataset.id)),
+  editAccount: el => { closeModal(); accountForm(acc(el.dataset.id)); },
   openAccount: el => { S.f.account = el.dataset.id; if (location.hash === '#tx') render(); else location.hash = 'tx'; },
   async saveAccount(el) {
     const v = form('#accf'); if (!v.name.trim()) return toast('Give the account a name');
@@ -1201,6 +1194,13 @@ const A = {
   },
   async archiveAccount(el) { if (!confirm('Archive this account? Its history stays.')) return; await safe(() => DB.update('accounts', el.dataset.id, { archived: true })); closeModal(); render(); },
   addBill: () => billForm(),
+  toggleHide: () => { S.settings.hideAmounts = !S.settings.hideAmounts; saveSettings(); render(); },
+  quickCat: el => { if (!activeAccounts().length) return (toast('Add an account first'), accountForm()); txForm({ kind: 'expense', category_id: el.dataset.id }); },
+  cardMenu: el => { const a = acc(el.dataset.id), bal = balances()[a.id]; modal(a.name, `<div class="cardmenu">${bankCard(a, bal)}<div class="xs faint" style="text-align:center;margin:10px 0 4px">${matchedLabel(a.id)}</div>
+      <div class="addgrid"><button data-a="cardActivity" data-id="${a.id}"><span class="b">${IC('activity')}</span><b>Activity</b><small>Everything in ${esc(a.name)}</small></button>
+      <button data-a="matchAccount" data-id="${a.id}"><span class="b gold">${IC('scale')}</span><b>Match balance</b><small>Line up with your bank app</small></button>
+      <button data-a="editAccount" data-id="${a.id}" class="wide"><span class="b">${IC('pencil')}</span><b>Edit account</b><small>Name, type, auto-detect</small></button></div></div>`); },
+  cardActivity: el => { closeModal(); S.f.account = el.dataset.id; location.hash = 'tx'; },
   matchAccount: el => { closeModal(); matchForm(acc(el.dataset.id)); },
   matchShot: el => matchShot(el.dataset.id),
   saveMatch: el => saveMatch(el.dataset.id),

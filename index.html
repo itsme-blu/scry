@@ -587,6 +587,102 @@ details.orig div{margin-top:8px;padding:10px 12px;border-radius:14px;background:
 .bcard[data-brand="wise"] .m{text-shadow:none}
 .bcard[data-brand="cash"]{background:linear-gradient(135deg,#2BB07A,#178A5C 60%,#0E6544)}
 .bcard[data-brand="cash"] .lg{background:#0E3B2A}
+/* ===== v15: wallet cards, summary blocks, quick categories (inspired by the card-wallet style Blu likes) ===== */
+.cap{font:700 12px var(--body);letter-spacing:.14em;text-transform:uppercase}
+.hello .hi.cap,.mhead .greet .hi.cap{color:var(--muted);font-size:11px}
+.hello .nm{font:800 30px var(--display);letter-spacing:-.025em;margin-top:4px}
+.mhead .greet .nm{font-size:22px}
+.balance .bh .k{color:#C9D2EA}
+.eye{width:36px;height:36px;border-radius:999px;display:grid;place-items:center;background:rgba(255,255,255,.08);border:1px solid var(--line);color:var(--ink);cursor:pointer}
+.balance .bfoot{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:12px}
+.balance .bfoot .chip{margin:0}
+.balance .bh .chips{display:none}
+/* --- bank cards --- */
+.bcard{position:relative;aspect-ratio:1.586/1;border-radius:20px;padding:16px 18px;display:flex;flex-direction:column;justify-content:space-between;cursor:pointer;overflow:hidden;color:#fff;
+  background:linear-gradient(135deg,#6C63FF,#3B33B8);box-shadow:0 12px 28px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.22);transition:transform .15s;min-width:0;width:100%;box-sizing:border-box;text-align:left;border:0;font:inherit}
+.bcard::before{content:"";position:absolute;inset:0;background:radial-gradient(120% 80% at 100% 0%,rgba(255,255,255,.22),transparent 55%),radial-gradient(90% 70% at 0% 120%,rgba(0,0,0,.22),transparent 60%);pointer-events:none;z-index:1}
+.bcard::after{display:none}
+.bcard:hover{transform:translateY(-2px)}
+.bcard>*{position:relative;z-index:2}
+.bcard .wm{position:absolute;z-index:0;right:-14%;top:50%;transform:translateY(-50%) rotate(-8deg);width:78%;aspect-ratio:1;object-fit:contain;opacity:.16;filter:grayscale(1) brightness(2.2) contrast(.9);mix-blend-mode:screen;border-radius:30%}
+.bcard{isolation:isolate}
+.bcard .top{display:flex;align-items:center;gap:8px;justify-content:flex-start}
+.bcard .lg{width:30px;height:30px;border-radius:9px;overflow:hidden;background:#fff;display:grid;place-items:center;flex:none;box-shadow:0 2px 6px rgba(0,0,0,.2)}
+.bcard .lg img{width:100%;height:100%;object-fit:contain}
+.bcard .nm{font:800 17px var(--display);letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bcard .chip{width:40px;height:30px;border-radius:7px;flex:none;
+  background:linear-gradient(90deg,transparent 46%,rgba(0,0,0,.22) 46% 54%,transparent 54%),linear-gradient(0deg,transparent 28%,rgba(0,0,0,.18) 28% 34%,transparent 34% 66%,rgba(0,0,0,.18) 66% 72%,transparent 72%),linear-gradient(135deg,#F4F6F8,#B9C0C8 55%,#E3E7EB);box-shadow:inset 0 0 0 1px rgba(0,0,0,.2)}
+.bcard .k{font:700 11px var(--body);letter-spacing:.14em;text-transform:uppercase;opacity:.85}
+.bcard .m{font:800 22px var(--display);letter-spacing:-.02em;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 2px rgba(0,0,0,.25)}
+.bcard[data-brand="maribank"]{background:linear-gradient(135deg,#FF8A2A,#F26A12 55%,#D94F0A)}
+.bcard[data-brand="maribank"] .chip{background:linear-gradient(90deg,transparent 46%,rgba(0,0,0,.2) 46% 54%,transparent 54%),linear-gradient(0deg,transparent 28%,rgba(0,0,0,.16) 28% 34%,transparent 34% 66%,rgba(0,0,0,.16) 66% 72%,transparent 72%),linear-gradient(135deg,#F7E3A8,#D2A955 55%,#F0D48C)}
+.bcard[data-brand="gcash"]{background:linear-gradient(135deg,#2F7BFF,#0B54E6 55%,#0738AE)}
+.bcard[data-brand="gotyme"]{background:radial-gradient(90% 120% at 85% 20%,rgba(29,224,230,.22),transparent 60%),linear-gradient(135deg,#1C1F26,#0B0D12 60%,#000)}
+.bcard[data-brand="gotyme"] .wm{opacity:.22;filter:grayscale(1) brightness(1.6)}
+.bcard[data-brand="wise"]{background:linear-gradient(135deg,#B9F07F,#9FE15C 55%,#86CF43);color:#163300}
+.bcard[data-brand="wise"] .m{text-shadow:none}
+.bcard[data-brand="wise"] .wm{mix-blend-mode:multiply;filter:grayscale(1) contrast(1.4);opacity:.12}
+.bcard[data-brand="cash"]{background:repeating-linear-gradient(135deg,rgba(255,255,255,.03) 0 2px,transparent 2px 6px),linear-gradient(160deg,#2A2D33,#121417 70%)}
+.bcard[data-brand="cash"]::after{display:block;content:"";position:absolute;top:0;left:0;right:0;height:38%;background:linear-gradient(100deg,#C9A66B 0 38%,#D9DDE2 38% 70%,transparent 70%);clip-path:polygon(0 0,100% 0,100% 30%,62% 100%,0 100%);opacity:.9;z-index:0}
+.bcard[data-brand="cash"] .lg{background:#0E3B2A}
+.bcard[data-brand="credit"]{background:linear-gradient(135deg,#3A3F4B,#15171C)}
+.addcard{align-items:center;justify-content:center;gap:8px;background:rgba(255,255,255,.04)!important;border:1.5px dashed var(--line)!important;color:var(--muted);box-shadow:none}
+.addcard::before{display:none}
+/* stack on phone Home: each card peeks, the biggest balance sits in front */
+.wstack{display:flex;flex-direction:column;padding-top:2px}
+.wstack .bcard+.bcard{margin-top:calc(-63.05% + 52px)}
+.wstack .bcard{box-shadow:0 -6px 18px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.22)}
+.wlink{display:flex;align-items:center;justify-content:center;gap:4px;margin-top:10px;font-size:13px;color:var(--faint);text-decoration:none}
+.cardgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:18px}
+.cardgrid.wallet{grid-template-columns:repeat(auto-fill,minmax(280px,1fr))}
+/* net worth card on Wallet */
+.networth .v{font:800 clamp(34px,5vw,46px)/1.1 var(--display);letter-spacing:-.03em;margin:8px 0 14px}
+.nw2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.nw2>div{padding:12px 14px;border-radius:16px;background:rgba(255,255,255,.07);border:1px solid var(--line)}
+.nw2 span{display:block;font-size:12px;color:var(--muted)} .nw2 b{font:800 18px var(--display);font-variant-numeric:tabular-nums}
+.networth .bh{display:flex;align-items:center}
+/* summary blocks */
+.summ{display:flex;flex-direction:column;gap:10px}
+.sh{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.sh .cap{font-size:13px}
+.sh .xs{color:var(--faint)}
+.pill{font-size:12px;font-weight:600;padding:4px 10px;border-radius:999px;background:rgba(255,255,255,.1)}
+.sblk{position:relative;border-radius:18px;padding:14px 16px;display:flex;flex-direction:column;justify-content:flex-end;min-height:84px}
+.sblk.inc{background:linear-gradient(180deg,#2F8A4A,#1F6B37)}
+.sblk.exp{background:linear-gradient(180deg,#B9506A,#8A2F48)}
+.sblk .ic{position:absolute;top:12px;left:14px;width:32px;height:32px;border-radius:999px;display:grid;place-items:center;background:rgba(255,255,255,.16)}
+.sblk .pct{position:absolute;top:12px;right:14px;font:700 13px var(--display);padding:3px 9px;border-radius:999px;background:rgba(255,255,255,.18)}
+.sblk .k{font-size:11px;opacity:.9;margin-top:40px}
+.sblk .v{font:800 24px var(--display);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.sblk .n{font-size:12px;opacity:.85}
+.summ .net{display:flex;justify-content:space-between;align-items:flex-end;padding-top:10px;border-top:1px solid var(--line-soft);margin-top:2px}
+.summ .net .k{font-size:11px;color:var(--muted)} .summ .net .v{font:800 22px var(--display);font-variant-numeric:tabular-nums}
+/* quick category buttons */
+.qcats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.qcats button{all:unset;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px 6px;border-radius:20px;background:var(--glass),rgba(12,17,36,.55);border:1px solid var(--line);color:var(--ink)}
+.qcats button:hover{background:rgba(255,255,255,.08)}
+.qcats b{font:700 11px var(--body);letter-spacing:.1em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+/* budgets row */
+.rowlink{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-radius:20px;background:var(--glass),rgba(12,17,36,.55);border:1px solid var(--line);color:var(--ink);text-decoration:none}
+.rowlink b{font:700 16px var(--display);display:block} .rowlink small{font-size:12px;color:var(--faint)}
+.cardmenu .bcard{max-width:340px;margin:0 auto;cursor:default}
+.cardmenu .bcard:hover{transform:none}
+@media (max-width:760px){
+  .cardgrid.wallet{grid-template-columns:1fr 1fr;gap:10px}
+  .cardgrid.wallet .bcard{padding:11px 12px;border-radius:16px}
+  .cardgrid.wallet .bcard .nm{font-size:13px} .cardgrid.wallet .bcard .m{font-size:16px}
+  .cardgrid.wallet .bcard .lg{width:22px;height:22px;border-radius:6px}
+  .cardgrid.wallet .bcard .chip{width:30px;height:22px;border-radius:5px}
+  .cardgrid.wallet .bcard .k{font-size:9px}
+  .hello{display:none}
+}
+@media (min-width:1001px){
+  .hg .cardgrid{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+  .summ{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:auto 1fr auto;gap:10px}
+  .summ .sh,.summ .net{grid-column:1/-1}
+  .summ .sblk{flex:none!important;min-height:0}
+  .summ .sblk .k{margin-top:44px}
+}
 </style>
 </head>
 <body>
@@ -595,6 +691,6 @@ details.orig div{margin-top:8px;padding:10px 12px;border-radius:14px;background:
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
 <script src="config.js?v=3" onerror="void 0"></script>
-<script src="app.js?v=14"></script>
+<script src="app.js?v=15"></script>
 </body>
 </html>
