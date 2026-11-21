@@ -1402,24 +1402,39 @@ function modal(title, body, foot = '', wide = false) {
   setTimeout(() => ($('#modal-root [autofocus]') || $('#modal-root .modal button'))?.focus(), 30);
 }
 const closeModal = () => { if (!$('#modal-root').innerHTML) return; $('#modal-root').innerHTML = ''; lastFocus?.focus?.(); };
-const accOptions = (sel, allowEmpty) => (allowEmpty ? '<option value="">—</option>' : '') + activeAccounts().map(a => `<option value="${a.id}" ${sel === a.id ? 'selected' : ''}>${esc(a.name)}${a.currency !== 'PHP' ? ' (' + a.currency + ')' : ''}</option>`).join('');
+const accOptions = (sel, allowEmpty, only) => (allowEmpty ? '<option value="">—</option>' : '') + activeAccounts().filter(a => !only || only(a) || a.id === sel).map(a => `<option value="${a.id}" ${sel === a.id ? 'selected' : ''}>${esc(a.name)}${a.currency !== 'PHP' ? ' (' + a.currency + ')' : ''}</option>`).join('');
 const catOptions = (kind, sel) => '<option value="">Uncategorised</option>' + catsOf(kind).map(c => `<option value="${c.id}" ${sel === c.id ? 'selected' : ''}>${esc(c.icon || '')} ${esc(c.name)}</option>`).join('');
 const segTag = v => `<div class="seg" data-seg="tag" role="group" aria-label="Personal or Daybreak">${[['personal', 'Personal'], ['daybreak', 'Daybreak 🌅']].map(([k, l]) => `<button type="button" class="${v === k ? 'on' : ''}" data-v="${k}">${l}</button>`).join('')}</div>`;
 const amountField = (name, val, cur) => `<div class="amount-wrap"><span class="cur" data-cur>${SYM[cur] || cur}</span><input class="amount-in" name="${name}" inputmode="decimal" placeholder="0.00" value="${val != null ? num(val).toFixed(2) : ''}" autofocus aria-label="Amount"></div>`;
 
 let txCtx = null;
+const isCashAcc = a => a.type === 'cash';
+const isMoneyAcc = a => !isCashAcc(a) && !['loan', 'credit', 'investment'].includes(a.type);
+const MOVE = {
+  withdraw: { title: 'Withdraw cash', save: 'Save withdrawal', note: 'Cash withdrawal', from: isMoneyAcc, to: isCashAcc },
+  deposit: { title: 'Deposit cash', save: 'Save deposit', note: 'Cash deposit', from: isCashAcc, to: isMoneyAcc },
+  move: { title: 'Transfer', save: 'Save transfer', note: '', from: isMoneyAcc, to: isMoneyAcc },
+};
+function moveForm(mode) {
+  const m = MOVE[mode], from = activeAccounts().filter(m.from), to = activeAccounts().filter(m.to);
+  if (mode !== 'move' && !activeAccounts().some(isCashAcc)) { toast('Add a Cash account first'); return accountForm({ type: 'cash', name: 'Cash' }); }
+  if (!from.length || !to.length || (mode === 'move' && from.length < 2)) return toast('Add two bank or e-wallet accounts first');
+  const b = balances(), top = l => [...l].sort((x, y) => ((y.currency === 'PHP') - (x.currency === 'PHP')) || (b[y.id] || 0) * (rate(y.currency) ?? 0) - (b[x.id] || 0) * (rate(x.currency) ?? 0));
+  const f = top(from)[0], t = top(to).find(a => a.id !== f.id);
+  txForm({ kind: 'transfer', account_id: f.id, to_account_id: t?.id, note: m.note }, { mode });
+}
 function txForm(t = {}, ctx = {}) {
   txCtx = ctx;
-  const kind = t.kind || 'expense', accId = t.account_id || activeAccounts()[0]?.id;
-  modal(t.id ? 'Edit transaction' : ctx.inboxId ? 'Review notification' : 'Add transaction', `<form class="form" id="txf" data-kind="${kind}" onsubmit="return false">
+  const kind = t.kind || 'expense', accId = t.account_id || activeAccounts()[0]?.id, mv = MOVE[ctx.mode];
+  modal(t.id ? 'Edit transaction' : ctx.inboxId ? 'Review notification' : mv ? mv.title : 'Add transaction', `<form class="form" id="txf" data-kind="${kind}" onsubmit="return false">
 
-    <div class="seg" data-seg="kind" role="group" aria-label="Type">${[['expense', 'Expense', 'e'], ['income', 'Income', 'i'], ['transfer', 'Transfer', 't']].map(([k, l, c]) => `<button type="button" class="${c} ${kind === k ? 'on' : ''}" data-v="${k}">${l}</button>`).join('')}</div>
+    <div class="seg"${mv ? ' hidden' : ''} data-seg="kind" role="group" aria-label="Type">${[['expense', 'Expense', 'e'], ['income', 'Income', 'i'], ['transfer', 'Transfer', 't']].map(([k, l, c]) => `<button type="button" class="${c} ${kind === k ? 'on' : ''}" data-v="${k}">${l}</button>`).join('')}</div>
     ${amountField('amount', t.amount, curOf(accId))}
     <div id="catBlock"><div class="lbl" style="margin-bottom:6px">Category</div><div class="catpick" id="catpick"></div>
       <select name="category_id" style="margin-top:8px;width:100%" aria-label="All categories">${catOptions(kind === 'transfer' ? 'expense' : kind, t.category_id)}</select>
       <div class="hint" id="guessHint" style="margin-top:4px"></div></div>
-    <div class="two"><label class="f"><span id="accLbl">Account</span><select name="account_id">${accOptions(accId)}</select></label>
-      <label class="f" id="toWrap">To account<select name="to_account_id">${accOptions(t.to_account_id, true)}</select></label></div>
+    <div class="two"><label class="f"><span id="accLbl">Account</span><select name="account_id">${accOptions(accId, false, mv?.from)}</select></label>
+      <label class="f" id="toWrap">To account<select name="to_account_id">${accOptions(t.to_account_id, !mv, mv?.to)}</select></label></div>
     <label class="f" id="toAmtWrap">Amount received (other currency)<input name="to_amount" inputmode="decimal" value="${t.to_amount != null ? num(t.to_amount).toFixed(2) : ''}"></label>
     <label class="f">Note<input name="note" value="${esc(t.note || '')}" placeholder="e.g. Jollibee, Meralco, padala" autocomplete="off"></label>
     <div class="two"><label class="f">Date<input type="date" name="date" value="${t.date || today()}"></label>
@@ -1441,7 +1456,7 @@ function syncTxForm() {
     const sel = f.category_id.value;
     $('#catpick').innerHTML = topCats(kind, 8).map(c => `<button type="button" class="${sel === c.id ? 'on' : ''}" data-a="pickCat" data-id="${c.id}">${catIcon(c)} ${esc(c.name)}</button>`).join('');
   }
-  $('#saveTxBtn').textContent = txCtx?.inboxId ? 'Approve' : { expense: 'Save expense', income: 'Save income', transfer: 'Save transfer' }[kind];
+  $('#saveTxBtn').textContent = txCtx?.inboxId ? 'Approve' : MOVE[txCtx?.mode] ? MOVE[txCtx.mode].save : { expense: 'Save expense', income: 'Save income', transfer: 'Save transfer' }[kind];
 }
 
 function accountForm(a = {}) {
@@ -1796,12 +1811,15 @@ const A = {
   addSheet: () => modal('Add', `<div class="addgrid">
       <button data-a="addKind" data-v="expense"><span class="b out">${IC('arrow-up-right')}</span><b>Expense</b><small>Money you spent</small></button>
       <button data-a="addKind" data-v="income"><span class="b in">${IC('arrow-down-left')}</span><b>Income</b><small>Money you got</small></button>
-      <button data-a="addTransfer"><span class="b">${IC('arrow-left-right')}</span><b>Transfer</b><small>Between your accounts</small></button>
+      <button data-a="addMove" data-v="move"><span class="b">${IC('arrow-left-right')}</span><b>Transfer</b><small>Bank to bank</small></button>
+      <button data-a="addMove" data-v="withdraw"><span class="b">${IC('banknote')}</span><b>Withdraw</b><small>Bank to cash</small></button>
+      <button data-a="addMove" data-v="deposit"><span class="b">${IC('landmark')}</span><b>Deposit</b><small>Cash to bank</small></button>
       <button data-a="scanFromSheet"><span class="b gold">${IC('scan-line')}</span><b>Scan</b><small>Receipt, bill or statement</small></button>
       <a href="#bills" data-a="close" class="wide"><span class="b">${IC('receipt')}</span><b>Pay a bill</b><small>Log a bill payment</small></a>
     </div>`),
   addKind: el => { closeModal(); if (!activeAccounts().length) return (toast('Add an account first'), accountForm()); txForm({ kind: el.dataset.v }); },
   scanFromSheet: () => { closeModal(); scanPick(); },
+  addMove: el => { closeModal(); moveForm(el.dataset.v); },
   addTransfer: () => { closeModal(); activeAccounts().length > 1 ? txForm({ kind: 'transfer' }) : toast('Add two accounts first'); },
   editTx: el => txForm(S.d.transactions.find(t => t.id === el.dataset.id)),
   pickCat: el => { $('#txf').category_id.value = el.dataset.id; $('#guessHint').textContent = ''; syncTxForm(); },
