@@ -113,7 +113,7 @@ function redact(t) {
 // What the database would do with one notification: drop it, or keep a redacted copy.
 function screenNotification(item) {
   const raw = `${item.title || ''} ${item.body || ''}`;
-  if (!/(gcash|wise|transferwise|mari ?bank|maribank|gotyme|go ?tyme)/i.test(`${item.app || ''} ${item.package || ''}`)) return { keep: false, why: 'not one of your four bank apps' };
+  if (!/(gcash|wise|transferwise|mari ?bank|maribank|gotyme|go ?tyme|messag|\bmms\b|gmail|android\.gm\b)/i.test(`${item.app || ''} ${item.package || ''}`)) return { keep: false, why: 'not one of your bank apps, Messages or Gmail' };
   if (looksLikeCode(raw)) return { keep: false, why: 'looks like a login or verification code' };
   if (!hasMoney(raw)) return { keep: false, why: 'no money amount in it' };
   return { keep: true, title: redact(String(item.title || '').slice(0, 300)), body: redact(String(item.body || '').slice(0, 1000)) };
@@ -276,6 +276,53 @@ function upcoming(days) {
   }
   return out.sort((a, b) => a.date.localeCompare(b.date));
 }
+// Paydays (GOOD Hoops every 2 weeks, Intelocate, …). Stored in Blu's Scry login profile like his own names.
+const INCOME_REPEAT = { biweekly: 'Every 2 weeks', semimonthly: 'Twice a month (15th & end)', monthly: 'Monthly', weekly: 'Weekly', none: 'One-off' };
+const incomes = () => ((isDemo() ? S.settings.incomes : S.user?.user_metadata?.incomes) || []).filter(x => x && x.name);
+async function saveIncomes(list) {
+  if (isDemo()) { S.settings.incomes = list; saveSettings(); return; }
+  const { data, error } = await S.sb.auth.updateUser({ data: { incomes: list } }); if (error) throw error; S.user = data.user;
+}
+function nextPayday(d, every) {
+  if (every === 'weekly') return addDays(d, 7);
+  if (every === 'biweekly') return addDays(d, 14);
+  if (every === 'monthly') return addMonths(d, 1);
+  if (every === 'semimonthly') {                 // the 15th, then the last day of the month, then the 15th…
+    const x = parseD(d), last = new Date(x.getFullYear(), x.getMonth() + 1, 0).getDate();
+    return x.getDate() < 15 ? iso(new Date(x.getFullYear(), x.getMonth(), 15)) : x.getDate() < last ? iso(new Date(x.getFullYear(), x.getMonth(), last)) : iso(new Date(x.getFullYear(), x.getMonth() + 1, 15));
+  }
+  return null;
+}
+function upcomingIncome(days) {
+  const t = today(), end = addDays(t, days), out = [];
+  for (const inc of incomes()) {
+    if (S.tag !== 'all' && (inc.tag || 'personal') !== S.tag) continue;
+    let d = inc.next, n = 0;
+    if (d < t) out.push({ inc, date: d, late: true, first: true });
+    else while (d && d <= end && n++ < 10) { out.push({ inc, date: d, first: n === 1 }); d = nextPayday(d, inc.every); }
+  }
+  return out.sort((a, b) => a.date.localeCompare(b.date));
+}
+const incomePerMonth = () => incomes().reduce((s, i) => s + num(i.amount) * ({ weekly: 52 / 12, biweekly: 26 / 12, semimonthly: 2, monthly: 1 }[i.every] || 0) * (rate(curOf(i.account_id)) ?? 0), 0);
+function incomeRow(o, withLog = true) {
+  const i = o.inc, a = acc(i.account_id), dd = daysBetween(today(), o.date);
+  const when = o.late ? `<span class="badge warn">${-dd === 1 ? '1 day ago' : -dd + ' days ago'}</span>` : dd === 0 ? '<span class="badge ok">Today</span>' : dd === 1 ? '<span class="badge ok">Tomorrow</span>' : '';
+  return `<div class="item click inc-row" data-a="editIncome" data-id="${i.id}" role="button" tabindex="0">${dateBox(o.date, false)}
+    <div class="main"><div class="t">${esc(i.name)}${dbBadge(i.tag)}</div><div class="s">${esc(INCOME_REPEAT[i.every] || '')}${a ? ' · into ' + esc(a.name) : ''}</div></div>
+    ${when}<div class="amt pos">${num(i.amount) ? '+' + money(num(i.amount), a?.currency || 'PHP') : 'Varies'}</div>${withLog ? `<button class="btn sm inc-log" data-a="logIncome" data-id="${i.id}" data-date="${o.date}" aria-label="Log ${esc(i.name)} pay">${IC('download', 'sm')} Log</button>` : ''}</div>`;
+}
+function incomeForm(i = {}) {
+  modal(i.id ? 'Edit income' : 'Add income source', `<form class="form" id="incf" onsubmit="return false">
+    <label class="f">Who pays you<input name="name" value="${esc(i.name || '')}" placeholder="e.g. GOOD Hoops, Intelocate" autofocus></label>
+    <div class="two"><label class="f">Usual amount<input name="amount" inputmode="decimal" value="${i.amount ? num(i.amount).toFixed(2) : ''}" placeholder="Leave blank if it varies"></label>
+      <label class="f">Lands in<select name="account_id">${accOptions(i.account_id)}</select></label></div>
+    <div class="two"><label class="f">How often<select name="every">${Object.entries(INCOME_REPEAT).map(([k, l]) => `<option value="${k}" ${(i.every || 'biweekly') === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+      <label class="f">Next payday<input type="date" name="next" value="${i.next || today()}"></label></div>
+    <div class="hint">The amount is in the currency of the account it lands in.</div>
+    ${segTag(i.tag || 'personal')}
+  </form>`, `${i.id ? `<button class="btn danger left" data-a="delIncome" data-id="${i.id}">Delete</button>` : ''}<button class="btn ghost" data-a="close">Cancel</button><button class="btn pri" data-a="saveIncome" data-id="${i.id || ''}">Save</button>`);
+}
+
 const PER_MONTH = { weekly: 52 / 12, monthly: 1, quarterly: 1 / 3, yearly: 1 / 12, none: 0 };
 const billsPerMonth = () => activeBills().reduce((s, b) => s + num(b.amount) * (PER_MONTH[b.repeat] || 0), 0);
 const overdueBills = () => S.d.bills.filter(b => b.active && b.due_date < today());
@@ -296,6 +343,28 @@ function bankOf(item) {
   const s = `${item.app || ''} ${item.package || ''}`;
   for (const [k, v] of Object.entries(BANKS)) if (v.re.test(s)) return k;
   return null;
+}
+// Texts (Google Messages / Samsung Messages) and Gmail carry bills and payment confirmations from billers.
+function sourceOf(item) {
+  const s = `${item.app || ''} ${item.package || ''}`;
+  if (/gmail|android\.gm\b/i.test(s)) return 'email';
+  if (/messag|\bmms\b|\bsms\b/i.test(s)) return 'sms';
+  return 'bank';
+}
+// Biller name from the sender ("PLDTHome" → PLDT) or the text ("for PLDT Account")
+function billerOf(item) {
+  const text = `${item.title || ''} ${item.body || ''}`;
+  const known = [['PLDT', /pldt/i], ['Meralco', /meralco/i], ['Globe', /globe/i], ['Smart', /\bsmart\b/i], ['Converge', /converge/i], ['Maynilad', /maynilad/i], ['Manila Water', /manila water/i], ['Sky', /\bsky ?(cable|fiber)\b/i], ['DITO', /\bdito\b/i]];
+  const k = known.find(([, re]) => re.test(text)); if (k) return k[0];
+  const m = text.match(/\b(?:for|from)\s+([A-Z][A-Za-z&.\- ]{2,30}?)\s+(?:account|acct|bill|subscription)\b/i);
+  return m ? m[1].trim() : (item.title || '').replace(/\s*(home|ph|alerts?|notify|noreply|no-reply)\s*$/i, '').trim() || null;
+}
+function billDueOf(item) {                      // a due date written in the message, if any
+  const text = `${item.title || ''} ${item.body || ''}`;
+  const m = text.match(/\bdue(?:\s+date)?(?:\s+on|\s+is|:)?\s+([A-Z][a-z]{2,8}\.?\s+\d{1,2}(?:,?\s+\d{4})?|\d{1,2}\/\d{1,2}\/\d{2,4}|\d{4}-\d{2}-\d{2})/i);
+  if (!m) return null;
+  const d = new Date(/\d{4}/.test(m[1]) || /\//.test(m[1]) ? m[1] : `${m[1]} ${new Date().getFullYear()}`);
+  return isNaN(d) ? null : iso(d);
 }
 function parseNotif(item) {
   const text = `${item.title || ''}. ${item.body || ''}`.replace(/\s+/g, ' ');
@@ -318,6 +387,12 @@ function parseNotif(item) {
   // A full stop ends the name only at a sentence end, so initials like "B. H. R. AUSTRIA" stay whole.
   const pm = pq || text.match(/\b(?:from|to|at)\s+([A-Z0-9][A-Za-z0-9&'.\- ]{1,40}?)(?=\s+(?:on|with|via|using|ref|reference|has|is|was|and|for)\b|\s*[,!(•]|\.(?:\s+[a-z]|\s*$)|$)/);
   const rm = text.match(/(?:ref(?:erence)?(?:\s*(?:no|number|#))?\.?|txn(?: id)?|transaction id)[:\s#]*([A-Z0-9-]{5,})/i);
+  if (sourceOf(item) !== 'bank') {          // a biller's text or email: either "thanks for your payment" or "your bill is due"
+    const paid = /thank you for (?:your )?payment|payment (?:of|amounting to)[^.]{0,40}(?:has been |was )?(?:received|posted|credited)|we(?:'ve| have) received your payment|successfully paid|payment received/i.test(text);
+    const due = /\bdue\b|amount due|total amount due|statement of account|your (?:bill|soa)|bill (?:is|amounting)|please pay/i.test(text);
+    const k = paid ? 'billpaid' : due ? 'billdue' : null;
+    return { amount, currency, kind: k, party: billerOf(item), due: k === 'billdue' ? billDueOf(item) : null, ref: rm ? rm[1] : null, ok: amount != null && k != null };
+  }
   return { amount, currency, kind, party: pm ? pm[1].trim() : null, ref: rm ? rm[1] : null, ok: amount != null && kind != null };
 }
 function possibleDuplicate(accountId, amount, date) {
@@ -346,6 +421,12 @@ const sameTransfer = (fromId, toId, amount, date) => S.d.transactions.find(t => 
   && Math.abs(num(t.amount) - amount) < 0.005 && Math.abs(daysBetween(t.date, date)) <= 2);
 
 function inboxCheck(it) {
+  if (sourceOf(it) !== 'bank') {
+    const p = parseNotif(it), date = iso(new Date(it.received_at));
+    const bill = p.party ? S.d.bills.find(b => b.active && (norm(b.name).includes(norm(p.party)) || norm(p.party).includes(norm(b.name)))) : null;
+    const dup = p.kind === 'billpaid' && p.amount != null ? S.d.transactions.find(t => t.kind === 'expense' && Math.abs(num(t.amount) - p.amount) < 0.005 && Math.abs(daysBetween(t.date, date)) <= 3) : null;
+    return { p, a: null, date, bill, dup, biller: true, ready: false };
+  }
   const p = parseNotif(it), a = inboxAccount(it), date = iso(new Date(it.received_at));
   const curMismatch = a && p.ok && p.currency !== (a.currency || 'PHP');
   const own = p.ok && isOwnParty(p.party);
@@ -635,6 +716,16 @@ function billRow(o, withPay = true) {
 // ---------- review tray ----------
 // One review row: logo | what + status | amount | actions. Raw text lives only in the review sheet.
 function reviewRow(it) {
+  if (sourceOf(it) !== 'bank') {
+    const { p, bill, dup } = inboxCheck(it), src = sourceOf(it);
+    const title = p.ok ? `${p.party || 'Bill'} ${p.kind === 'billpaid' ? 'paid' : 'bill'}` : (it.title || 'Message');
+    const status = !p.ok ? "Couldn't read this one" : dup ? 'Possible duplicate' : p.kind === 'billpaid' ? 'Which account paid it?' : `Due ${p.due ? shortDate(p.due) : 'soon'}${bill ? ' · update bill' : ' · add bill'}`;
+    const st = !p.ok || dup ? 'risk' : p.kind === 'billpaid' ? 'ask' : '';
+    return `<div class="rvr" data-a="editInbox" data-id="${it.id}" role="button" tabindex="0">
+      <div class="lg src" aria-hidden="true">${IC(src === 'email' ? 'mail' : 'message-square-text', 'sm')}</div>
+      <div class="main"><div class="t">${esc(title)}</div><div class="s"><span class="st ${st}">${esc(status)}</span><span class="when">${src === 'email' ? 'Email' : 'Text'} · ${esc(timeOf(it.received_at))}</span></div></div>
+      <div class="amt">${p.amount != null ? (p.kind === 'billpaid' ? '−' : '') + money(p.amount, p.currency) : ''}</div><div class="ra"><button class="rbtn hov" data-a="ignoreInbox" data-id="${it.id}" aria-label="Dismiss">${IC('x', 'sm')}</button></div></div>`;
+  }
   const { p, a, dup, curMismatch, ready, xfer, counted } = inboxCheck(it), bk = bankOf(it), bank = BANKS[bk];
   let title, amtTxt = '', amtCls = '', status = '', st = '';
   if (!p.ok) { title = it.title || 'Notification'; status = "Couldn't read this one"; st = 'risk'; }
@@ -964,7 +1055,8 @@ function vHome() {
     ${quick.length ? `<div class="qcats c12" style="--o:4">${quick.map(c => `<button data-a="quickCat" data-id="${c.id}"><span>${IC(catLucide(c))}</span><b>${esc(c.name.split(/[ &]/)[0])}</b></button>`).join('')}</div>` : ''}
     <a class="rowlink c12" style="--o:6" href="#budget"><span><b>${nBud ? 'Budgets' : 'Set budgets'}</b>${nBud ? `<small>${nBud} set for ${monthName(thisMonth()).split(' ')[0]}</small>` : '<small>Give every peso a job</small>'}</span>${IC('chevron-right')}</a>
     <div class="${recent.length ? 'c6' : 'c12'}" style="--o:7"><section class="card"><div class="sh"><b class="cap">Upcoming</b><span class="grow"></span><a href="#bills" class="xs">All bills</a></div>
-      ${up.length ? `<div class="list">${up.slice(0, 4).map(o => billRow(o)).join('')}</div>` : '<div class="empty1">Nothing due in the next 45 days.</div>'}</section></div>
+      ${(() => { const both = [...upcomingIncome(45).map(o => ({ ...o, k: 'inc' })), ...up.map(o => ({ ...o, k: 'bill' }))].sort((x, y) => x.date.localeCompare(y.date)).slice(0, 5);
+        return both.length ? `<div class="list">${both.map(o => o.k === 'inc' ? incomeRow(o, o.first) : billRow(o)).join('')}</div>` : '<div class="empty1">Nothing due or coming in for 45 days.</div>'; })()}</section></div>
     ${recent.length ? `<div class="c6" style="--o:8"><section class="card"><div class="sh"><b class="cap">Recent</b><span class="grow"></span><a href="#tx" class="xs">See all</a></div><div class="list">${recent.map(txRow).join('')}</div></section></div>` : ''}
   </div>`;
 }
@@ -1048,7 +1140,12 @@ function vBills() {
       <div><div class="lbl">Next 7 days</div><div class="mid warn">${money(sum(soon))}</div><div class="xs faint">${soon.length} bill${soon.length === 1 ? '' : 's'}</div></div>
       <div><div class="lbl">Per month</div><div class="mid">${money(billsPerMonth())}</div><div class="xs faint">all repeating bills</div></div></div></section>`;
   if (S.billView === 'cal') return head + calendar();
-  return head + `<section class="card">${group('Overdue', late)}${group('Next 7 days', soon)}${group('Later', later)}${all.length ? '' : '<div class="empty">No bills yet. Add rent, Meralco, internet, subscriptions…</div>'}</section>
+  const inc = upcomingIncome(45), srcs = incomes();
+  const incCard = `<section class="card mb inc-card"><h2>Income coming in <small><button class="btn sm" data-a="addIncome">${IC('plus', 'sm')} Add income</button></small></h2>
+    ${srcs.length ? `<div class="list">${inc.slice(0, 6).map(o => incomeRow(o, o.first)).join('') || '<div class="empty1">No paydays in the next 45 days.</div>'}</div>
+      <div class="xs faint" style="margin-top:8px">About ${money(incomePerMonth())} a month from ${srcs.length} source${srcs.length === 1 ? '' : 's'}${srcs.some(x => !num(x.amount)) ? ' (sources marked "Varies" not counted)' : ''}</div>`
+      : '<div class="empty1">Add GOOD Hoops, Intelocate and any other pay so Scry knows when money is coming in.</div>'}</section>`;
+  return head + incCard + `<section class="card">${group('Overdue', late)}${group('Next 7 days', soon)}${group('Later', later)}${all.length ? '' : '<div class="empty">No bills yet. Add rent, Meralco, internet, subscriptions…</div>'}</section>
     ${paused.length ? `<section class="card" style="margin-top:var(--gap)"><h2>Paid one-offs & paused</h2><div class="list">${paused.map(b => billRow({ bill: b, date: b.due_date }, false)).join('')}</div></section>` : ''}`;
 }
 function calendar() {
@@ -1492,6 +1589,10 @@ const A = {
       if (el.dataset.id) saved = await DB.update('transactions', el.dataset.id, row);
       else { if (txCtx?.inboxId) row.inbox_id = txCtx.inboxId; [saved] = await DB.insert('transactions', row); }
       if (txCtx?.inboxId) await DB.update('inbox', txCtx.inboxId, { status: 'done', transaction_id: saved.id });
+      if (txCtx?.incomeId) {
+        const list = incomes().map(x => x.id !== txCtx.incomeId ? x : { ...x, next: x.every === 'none' ? x.next : (() => { let d = x.next; do { d = nextPayday(d, x.every); } while (d && d <= row.date); return d || x.next; })() });
+        await saveIncomes(list.filter(x => !(x.id === txCtx.incomeId && x.every === 'none')));
+      }
     });
     txCtx = null; closeModal(); render(); toast('Saved');
   },
@@ -1507,6 +1608,20 @@ const A = {
   },
   async archiveAccount(el) { if (!confirm('Archive this account? Its history stays.')) return; await safe(() => DB.update('accounts', el.dataset.id, { archived: true })); closeModal(); render(); },
   addBill: () => billForm(),
+  addIncome: () => activeAccounts().length ? incomeForm() : (toast('Add an account first'), accountForm()),
+  editIncome: el => incomeForm(incomes().find(x => x.id === el.dataset.id)),
+  async saveIncome(el) {
+    const v = form('#incf'); if (!v.name.trim()) return toast('Who pays you?');
+    const row = { id: el.dataset.id || Math.random().toString(36).slice(2, 10), name: v.name.trim(), amount: amt(v.amount) || 0, account_id: v.account_id, every: v.every, next: v.next || today(), tag: segVal('tag') || 'personal' };
+    const list = incomes().filter(x => x.id !== row.id).concat(row);
+    await safe(() => saveIncomes(list)); closeModal(); render(); toast('Saved');
+  },
+  async delIncome(el) { if (!confirm('Delete this income source? Logged pay stays in your transactions.')) return; await safe(() => saveIncomes(incomes().filter(x => x.id !== el.dataset.id))); closeModal(); render(); },
+  logIncome: el => {
+    const i = incomes().find(x => x.id === el.dataset.id); if (!i) return;
+    const c = catsOf('income').find(c => /salary|pay|wage|freelance|work/i.test(c.name)) || catsOf('income')[0];
+    txForm({ kind: 'income', amount: num(i.amount) || null, account_id: i.account_id, date: el.dataset.date <= today() ? el.dataset.date : today(), note: i.name, category_id: c?.id, tag: i.tag || 'personal' }, { incomeId: i.id });
+  },
   toggleHide: () => { S.settings.hideAmounts = !S.settings.hideAmounts; saveSettings(); render(); },
   quickCat: el => { if (!activeAccounts().length) return (toast('Add an account first'), accountForm()); txForm({ kind: 'expense', category_id: el.dataset.id }); },
   cardMenu: el => { if (window.__justDragged) return; if (el.closest('#wstack') && el !== el.parentElement.lastElementChild) return stackFront(el);
@@ -1534,6 +1649,8 @@ const A = {
   scanAll: el => { const on = el.checked; document.querySelectorAll('#scanLines input[data-i]').forEach(c => { c.checked = on; }); },
   editBill: el => billForm(S.d.bills.find(b => b.id === el.dataset.id)),
   async saveBill(el) {
+    const fromInbox = S.pendingInboxBill; S.pendingInboxBill = null;
+    if (fromInbox) setTimeout(() => safe(() => DB.update('inbox', fromInbox, { status: 'done' })).then(render), 0);
     const v = form('#billf'); if (!v.name.trim()) return toast('Give the bill a name');
     const row = { name: v.name.trim(), amount: amt(v.amount), due_date: v.due_date, repeat: v.repeat, category_id: v.category_id || null, account_id: v.account_id || null, note: v.note || null, autopay: !!v.autopay, tag: segVal('tag') || 'personal', active: true };
     await safe(() => el.dataset.id ? DB.update('bills', el.dataset.id, row) : DB.insert('bills', row));
@@ -1570,6 +1687,16 @@ const A = {
   async acceptInbox(el) { await acceptOne(S.d.inbox.find(i => i.id === el.dataset.id)); render(); toast('Approved and added'); },
   async acceptAll() { let n = 0; for (const it of newInbox()) if (inboxCheck(it).ready) { await acceptOne(it); n++; } render(); toast(`Approved ${n}`); },
   editInbox(el) {
+    const it0 = S.d.inbox.find(i => i.id === el.dataset.id);
+    if (it0 && sourceOf(it0) !== 'bank') {
+      const { p, bill } = inboxCheck(it0), raw = [it0.title, it0.body].filter(Boolean).join(' · '), date = iso(new Date(it0.received_at));
+      if (p.kind === 'billdue') {
+        S.pendingInboxBill = it0.id;
+        return billForm(bill ? { ...bill, amount: p.amount ?? bill.amount, due_date: p.due || bill.due_date } : { name: p.party || 'Bill', amount: p.amount, due_date: p.due || today(), repeat: 'monthly', category_id: guessCategory(p.party || '', 'expense') || catByName('Phone & internet') || null });
+      }
+      const note = p.party ? `${p.party} bill` : (it0.title || 'Bill payment');
+      return txForm({ kind: 'expense', amount: p.amount, date, note, category_id: bill?.category_id || guessCategory(p.party || note, 'expense') || (/pldt|globe|smart|converge|dito|sky/i.test(p.party || '') ? catByName('Phone & internet') : /meralco|maynilad|water/i.test(p.party || '') ? catByName('Utilities') : null), tag: bill?.tag || 'personal' }, { inboxId: it0.id, raw });
+    }
     const it = S.d.inbox.find(i => i.id === el.dataset.id), { p, a, xfer } = inboxCheck(it);
     const raw = [it.title, it.body].filter(Boolean).join(' · '), date = iso(new Date(it.received_at));
     if (xfer) return txForm({ kind: 'transfer', amount: p.amount, account_id: xfer.from?.id, to_account_id: xfer.to?.id, date, note: 'Transfer', tag: 'personal' }, { inboxId: it.id, raw });
