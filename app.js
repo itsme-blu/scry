@@ -403,7 +403,7 @@ function parseNotif(item) {
   } else if ((m = text.match(/(?:US)?\$\s?([0-9][0-9,]*(?:\.[0-9]{1,2})?)/))) { currency = 'USD'; amount = m[1]; }
   amount = amount != null ? Number(String(amount).replace(/,/g, '')) : null;
   const inRe = /you(?:'ve| have)? received|\breceived\b|credited|cash[- ]?in|deposit|incoming|refund|added to your|you got|has arrived|interest earned|money in/i;
-  const outRe = /you(?:'ve| have)? sent|\bsent to\b|you paid|payment (?:to|of|for)|\bpaid\b|purchase|debited|withdr[ae]w|cash[- ]?out|transferred to|\bspent\b|charged|deducted|money out|card (?:payment|transaction)|transaction of\b.{1,40}?\bto\b|qrph payment|scan ?& ?pay transaction|bills? payment|merchant payment/i;
+  const outRe = /you(?:'ve| have)? sent|\bsent to\b|you paid|payment (?:to|of|for)|\bpaid\b|purchase|debited|withdr[ae]w|cash[- ]?out|transferred to|\bspent\b|charged|deducted|money out|card (?:payment|transaction)|transaction of\b.{1,40}?\bto\b|you(?:'ve| have)? transferred|\btransferred\b.{1,40}?\bto\b|qrph payment|scan ?& ?pay transaction|bills? payment|merchant payment/i;
   let kind = null;
   if (/sent you|has sent you/i.test(text)) kind = 'income';
   else if (/\btransfer of\b.{1,40}?\bto\b/i.test(text)) kind = 'expense';   // MariBank: "An InstaPay transfer of PHP 50.00 to GCash …"
@@ -412,7 +412,7 @@ function parseNotif(item) {
   else if (inRe.test(text)) kind = 'income';
   const pq = text.match(/\b(?:from|to|at)\s+["“']([^"”']{1,40})["”']/);   // a quoted name: from "JUAN & CO"
   // A full stop ends the name only at a sentence end, so initials like "B. H. R. AUSTRIA" stay whole.
-  const pm = pq || text.match(/\b(?:from|to|at)\s+([A-Z0-9][A-Za-z0-9&'.\- ]{1,40}?)(?=\s+(?:on|with|via|using|ref|reference|has|is|was|and|for)\b|\s*[,!(•]|\.(?:\s+[a-z]|\s*$)|$)/);
+  const pm = pq || text.match(/\b(?:from|to|at)\s+([A-Z0-9][A-Za-z0-9&'.*\- ]{1,40}?)(?=\s+(?:on|with|via|using|ref|reference|has|is|was|and|for)\b|\s*[,!(•]|\.(?:\s+[a-z]|\s*$)|$)/);
   const rm = text.match(/(?:ref(?:erence)?(?:\s*(?:no|number|#))?\.?|txn(?: id)?|transaction id)[:\s#]*([A-Z0-9-]{5,})/i);
   if (sourceOf(item) !== 'bank') {          // a biller's text or email: either "thanks for your payment" or "your bill is due"
     if (amount == null) {                   // billers often write a bare number: "amount due 1,599.00", "total of 6147.61"
