@@ -51,7 +51,7 @@ button{cursor:pointer}
 .count{margin-left:auto;min-width:20px;height:20px;padding:0 6px;border-radius:999px;font:600 11px/20px var(--mono);text-align:center;background:var(--ai-bg);color:var(--ai)}
 .count.risk{background:var(--risk-bg);color:var(--risk)}
 .rail .foot{margin-top:auto;padding:10px 12px;font-size:12px;color:var(--faint);line-height:1.45}
-main{min-width:0;padding:28px 36px 120px;max-width:1280px;width:100%}
+main{min-width:0;padding:28px 40px 120px;max-width:1520px;width:100%;margin:0 auto}
 .mhead{display:none}
 .tabbar{display:none}
 .fab{position:fixed;right:28px;bottom:28px;height:54px;padding:0 20px 0 16px;border-radius:18px;border:0;background:var(--primary);color:var(--on-primary);font-weight:700;font-size:15px;display:flex;align-items:center;gap:8px;box-shadow:0 10px 30px rgba(0,0,0,.4);z-index:20}
@@ -457,7 +457,7 @@ body[data-view="home"] .fab,body[data-view="penny"] .fab{display:none}
 .slim{display:flex;align-items:center;gap:8px;justify-content:center;padding:20px;color:var(--faint);font-size:13px}
 .sechead{margin:4px 2px 12px}
 @media (min-width:1001px){
-  .acc-strip{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));overflow:visible}
+  .acc-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));overflow:visible}
   .acc-tile{border-radius:20px}
 }
 /* review: one quiet card, 2-line rows */
@@ -515,6 +515,27 @@ details.orig div{margin-top:8px;padding:10px 12px;border-radius:14px;background:
 .psave{margin-top:12px;padding-top:12px;border-top:1px solid var(--line-soft)}
 .psave .btn{display:inline-flex;align-items:center;gap:6px}
 .photo-tag{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;opacity:.8}
+.mrows{display:flex;flex-direction:column}
+.mrows>div{display:flex;justify-content:space-between;align-items:baseline;padding:12px 0;border-top:1px solid var(--line-soft)}
+.mrows>div:first-child{border-top:0;padding-top:4px}
+.mrows span{font-size:13px;color:var(--muted)}
+.mrows b{font:800 22px var(--display);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.match-have{padding:16px;border-radius:14px;background:rgba(255,255,255,.05);text-align:center}
+.match-have .mid{font-size:28px;margin:4px 0}
+.match-in{display:flex;gap:8px;align-items:stretch}.match-in .amount-wrap{flex:1}
+.match-in .btn.cam{width:52px;padding:0;display:grid;place-items:center;flex:none}
+.spin.sm{width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:-2px;margin-right:6px}
+.acc-groups{display:flex;flex-direction:column;gap:var(--gap)}
+.acc-groups .span2{grid-column:auto}
+[data-a="matchAccount"].btn.sm{display:inline-flex;align-items:center;gap:6px}
+@media (max-width:760px){
+  [data-a="matchAccount"].btn.sm{width:36px;height:36px;padding:0;justify-content:center}
+  [data-a="matchAccount"] .t{display:none}
+  .acc-sum{gap:8px}
+  .acc-sum .card{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;padding:14px 16px}
+  .acc-sum .card .lbl{margin:0}
+  .acc-sum .card .xs{width:100%}
+}
 </style>
 </head>
 <body>
@@ -523,6 +544,6 @@ details.orig div{margin-top:8px;padding:10px 12px;border-radius:14px;background:
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
 <script src="config.js?v=3" onerror="void 0"></script>
-<script src="app.js?v=11"></script>
+<script src="app.js?v=12"></script>
 </body>
 </html>

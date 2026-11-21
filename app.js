@@ -226,7 +226,16 @@ function worth() {
   }
   return { own, owe, net: own + owe, missing: [...missing] };
 }
-const txInMonth = mk => S.d.transactions.filter(t => t.date.startsWith(mk));
+const ADJ = 'Balance adjustment';
+const isAdj = t => t.note === ADJ && !t.category_id;
+const txInMonth = mk => S.d.transactions.filter(t => t.date.startsWith(mk) && !isAdj(t));   // stats only; Activity still lists adjustments
+// last time each account was matched to the real bank balance (kept in the Scry profile, not the public code)
+const matchedMap = () => (isDemo() ? S.settings.matched : S.user?.user_metadata?.matched) || {};
+function matchedLabel(id) {
+  const d = matchedMap()[id]; if (!d) return '<span class="warn">Never matched</span>';
+  const n = daysBetween(d, today());
+  return n <= 0 ? 'Matched today' : n === 1 ? 'Matched yesterday' : n > 10 ? `<span class="warn">Matched ${n} days ago</span>` : `Matched ${n} days ago`;
+}
 function monthTotals(mk) {
   let inc = 0, out = 0;
   for (const t of txInMonth(mk)) {
@@ -531,10 +540,10 @@ function txRow(t) {
     title = t.note || 'Transfer'; sub = `${esc(a?.name || '?')} → ${esc(acc(t.to_account_id)?.name || '?')}`; amt = money(num(t.amount), cur); cls = 'muted';
   } else {
     title = t.note || c?.name || (t.kind === 'income' ? 'Income' : 'Expense');
-    sub = `${esc(c?.name || 'Uncategorised')} · ${esc(a?.name || '?')}`;
+    sub = isAdj(t) ? `Matched to your bank · ${esc(a?.name || '?')}` : `${esc(c?.name || 'Uncategorised')} · ${esc(a?.name || '?')}`;
     amt = (t.kind === 'income' ? '+' : '−') + money(num(t.amount), cur); cls = t.kind === 'income' ? 'pos' : '';
   }
-  return `<div class="item click" data-a="editTx" data-id="${t.id}" role="button" tabindex="0"><div class="ico">${t.kind === 'transfer' ? '⇄' : catIcon(c)}</div>
+  return `<div class="item click" data-a="editTx" data-id="${t.id}" role="button" tabindex="0"><div class="ico">${isAdj(t) ? IC('scale', 'sm') : t.kind === 'transfer' ? '⇄' : catIcon(c)}</div>
     <div class="main"><div class="t">${esc(title)}${dbBadge(t.tag)}</div><div class="s">${sub}</div></div>
     <div class="amt ${cls}">${amt}</div></div>`;
 }
@@ -594,13 +603,13 @@ function tray(limit) {
 }
 // ---------- views ----------
 function vHome() {
-  const w = worth(), mt = monthTotals(thisMonth()), up = upcoming(14), b = balances(), mon = monthName(thisMonth()).split(' ')[0];
+  const w = worth(), mt = monthTotals(thisMonth()), up = upcoming(45), b = balances(), mon = monthName(thisMonth()).split(' ')[0];
   const hr = new Date().getHours(), hello = hr < 12 ? 'Good morning' : hr < 18 ? 'Good afternoon' : 'Good evening';
   const spent = spentByCat(thisMonth(), false);
   const budRows = catsOf('expense').map(c => ({ c, bud: num(budgetFor(thisMonth(), c.id)?.amount), sp: spent[c.id] || 0 }))
     .filter(r => r.bud > 0).sort((x, y) => y.sp / y.bud - x.sp / x.bud).slice(0, 5);
   const byCat = Object.entries(spentByCat(thisMonth())).sort((a, b) => b[1] - a[1]).slice(0, 6), maxCat = byCat[0]?.[1] || 1;
-  const recent = S.d.transactions.filter(tagOK).sort((a, b) => b.date.localeCompare(a.date) || (b.created_at || '').localeCompare(a.created_at || '')).slice(0, 5);
+  const recent = S.d.transactions.filter(tagOK).sort((a, b) => b.date.localeCompare(a.date) || (b.created_at || '').localeCompare(a.created_at || '')).slice(0, 4);
   const usedPct = mt.inc ? Math.min(100, (mt.out / mt.inc) * 100) : (mt.out ? 100 : 0);
   const whole = money(w.net).replace(/\.\d\d$/, ''), cents = money(w.net).slice(-3);
   const nm = String(S.user?.user_metadata?.own_names || '').split(',')[0].trim().split(' ')[0] || 'Blu';
@@ -608,10 +617,11 @@ function vHome() {
   const accs = accAll.some(a => Math.abs(b[a.id]) > 0.004) ? accAll.filter(a => Math.abs(b[a.id]) > 0.004) : accAll;
   const ser = worthSeries(30), moves = Math.max(...ser) - Math.min(...ser) > 0.5;
   const cardList = (title, link, body) => `<section class="card"><h2>${title} <small>${link}</small></h2>${body}</section>`;
-  const billsBody = up.length ? `<div class="list">${up.slice(0, 4).map(o => billRow(o)).join('')}</div>` : '<div class="empty1">Nothing due in the next two weeks.</div>';
+  const billsBody = up.length ? `<div class="list">${up.slice(0, 4).map(o => billRow(o)).join('')}</div>` : '<div class="empty1">Nothing due in the next 45 days.</div>';
   const recentBody = recent.length ? `<div class="list">${recent.map(txRow).join('')}</div>` : '<div class="empty1">Nothing logged yet this month.</div>';
   const pairBR = !up.length && !recent.length
     ? `<div class="card c12 slim" style="--o:6">${IC('circle-check', 'sm')} Nothing due soon · nothing logged yet</div>`
+    : !up.length || !recent.length ? `<div class="c12" style="--o:5">${up.length ? cardList('Coming up', '<a href="#bills">All bills</a>', billsBody) : cardList('Recent activity', '<a href="#tx">See all</a>', recentBody)}</div>`
     : `<div class="c6" style="--o:5">${cardList('Coming up', '<a href="#bills">All bills</a>', billsBody)}</div><div class="c6" style="--o:7">${cardList('Recent activity', '<a href="#tx">See all</a>', recentBody)}</div>`;
   const budCard = budRows.length ? cardList('Budgets', '<a href="#budget">See all</a>', budRows.map(r => { const p = r.sp / r.bud; return `<div class="meter"><div class="row"><span>${catIcon(r.c)} ${esc(r.c.name)}</span><span class="grow"></span><span class="mono xs ${p > 1 ? 'neg' : 'muted'}">${money(r.sp)} / ${money(r.bud)}</span></div><div class="bar"><i class="${p > 1 ? 'over' : p > .8 ? 'warn' : ''}" style="width:${Math.min(100, p * 100)}%"></i></div></div>`; }).join('')) : '';
   const whereCard = byCat.length ? cardList('Where the money went', monthName(thisMonth()), byCat.map(([cid, v]) => { const c = cat(cid); return `<div class="meter"><div class="row"><span>${catIcon(c)} ${esc(c?.name || 'Uncategorised')}</span><span class="grow"></span><span class="mono xs muted">${money(v)}</span></div><div class="bar"><i class="blue" style="width:${(v / maxCat) * 100}%"></i></div></div>`; }).join('')) : '';
@@ -628,7 +638,7 @@ function vHome() {
       <div class="hq only-desk"><button class="btn pri" data-a="addTx">${IC('plus', 'sm')} Add</button><button class="btn" data-a="scan">${IC('scan-line', 'sm')} Scan</button><button class="btn" data-a="addTransfer">${IC('arrow-left-right', 'sm')} Transfer</button><a class="btn" href="#bills">${IC('receipt', 'sm')} Pay bill</a></div>
     </section>
     <section class="card month c5" style="--o:6"><h2>${mon} so far <small><a href="#tx">Activity</a></small></h2>
-      <div class="trio"><div><div class="xs faint">In</div><div class="mid pos">${money(mt.inc)}</div></div><div><div class="xs faint">Out</div><div class="mid">${money(mt.out)}</div></div><div><div class="xs faint">Left</div><div class="mid ${mt.left < 0 ? 'neg' : ''}">${money(mt.left)}</div></div></div>
+      <div class="mrows"><div><span>Money in</span><b class="pos">${money(mt.inc)}</b></div><div><span>Money out</span><b>${money(mt.out)}</b></div><div><span>Left</span><b class="${mt.left < 0 ? 'neg' : ''}">${money(mt.left)}</b></div></div>
       <div><div class="bar" aria-label="${Math.round(usedPct)}% of income spent"><i class="${usedPct > 95 ? 'over' : usedPct > 80 ? 'warn' : ''}" style="width:${usedPct}%"></i></div>
       <div class="xs faint" style="margin-top:8px">${mt.inc ? `${Math.round(usedPct)}% of this month's income spent` : 'No income logged yet this month'}</div></div></section>
     <div class="quick only-phone c12" style="--o:2">
@@ -745,18 +755,18 @@ function calendar() {
 
 function vAccounts() {
   const b = balances(), w = worth();
-  return ph('Accounts', 'Your accounts', 'Tap one to see its activity', '<button class="btn pri" data-a="addAccount">+ Add account</button>')
-  + `<div class="grid g3 mb">
+  return ph('Accounts', 'Your accounts', 'Tap Match now and then to line Scry up with your bank app', '<button class="btn pri" data-a="addAccount">+ Add account</button>')
+  + `<div class="grid g3 mb acc-sum">
     <div class="card"><div class="lbl">What I own</div><div class="mid pos">${money(w.own)}</div></div>
     <div class="card"><div class="lbl">What I owe</div><div class="mid ${w.owe < 0 ? 'neg' : ''}">${money(-w.owe)}</div></div>
     <div class="card hero"><div class="lbl">Net worth</div><div class="mid">${money(w.net)}</div>${w.missing.length ? `<div class="xs warn">Not counted: ${w.missing.join(', ')} (set rate in Settings)</div>` : ''}</div></div>
-  <div class="grid g2">${(() => { const groups = ACCOUNT_GROUPS.filter(([, types]) => activeAccounts().some(a => types.includes(a.type))); return groups; })().map(([title, types], gi, groups) => {
+  <div class="acc-groups">${(() => { const groups = ACCOUNT_GROUPS.filter(([, types]) => activeAccounts().some(a => types.includes(a.type))); return groups; })().map(([title, types], gi, groups) => {
     const list = activeAccounts().filter(a => types.includes(a.type));
     const sub = list.reduce((s, a) => s + b[a.id] * (rate(a.currency) ?? 0), 0);
     const lastOdd = groups.length % 2 === 1 && gi === groups.length - 1;   // fill the row, no empty half
     return `<section class="card ${lastOdd ? 'span2' : ''}"><h2>${title} <small class="mono">${money(sub)}</small></h2><div class="list">${list.map(a => `<div class="item click" data-a="openAccount" data-id="${a.id}" role="button" tabindex="0"><div class="ico">${accIcon(a)}</div>
-      <div class="main"><div class="t">${esc(a.name)}</div><div class="s">${ACCOUNT_TYPES[a.type]?.[0]}${a.currency !== 'PHP' ? ' · ' + esc(a.currency) : ''}${a.bank && BANKS[a.bank] ? ` · <span class="pos">auto-detect: ${BANKS[a.bank].name}</span>` : ''}</div></div>
-      <div class="amt ${b[a.id] < 0 ? 'neg' : ''}">${money(b[a.id], a.currency)}</div><button class="btn sm ghost" data-a="editAccount" data-id="${a.id}" aria-label="Edit ${esc(a.name)}">Edit</button></div>`).join('')}</div></section>`;
+      <div class="main"><div class="t">${esc(a.name)}</div><div class="s">${ACCOUNT_TYPES[a.type]?.[0]}${a.currency !== 'PHP' ? ' · ' + esc(a.currency) : ''}${a.bank && BANKS[a.bank] ? ' · auto' : ''} · ${matchedLabel(a.id)}</div></div>
+      <div class="amt ${b[a.id] < 0 ? 'neg' : ''}">${money(b[a.id], a.currency)}</div><button class="btn sm" data-a="matchAccount" data-id="${a.id}" aria-label="Match ${esc(a.name)} to your real balance">${IC('scale', 'sm')}<span class="t">Match</span></button><button class="btn sm ghost" data-a="editAccount" data-id="${a.id}" aria-label="Edit ${esc(a.name)}">${IC('pencil', 'sm')}</button></div>`).join('')}</div></section>`;
   }).join('') || '<section class="card span2"><div class="empty">No accounts yet. Add GoTyme, MariBank, GCash, Wise and Cash to start.</div></section>'}</div>`;
 }
 
@@ -872,7 +882,7 @@ function accountForm(a = {}) {
     <label class="f">Starting balance<input name="opening_balance" inputmode="decimal" value="${a.opening_balance != null ? num(a.opening_balance).toFixed(2) : ''}" placeholder="What it holds today"></label>
     <div class="hint" style="margin-top:-8px">For a credit card or loan, enter what you owe as a minus number, e.g. -8500.</div>
     <label class="f">Auto-detect from phone notifications<select name="bank"><option value="">Off (manual only)</option>${Object.entries(BANKS).map(([k, v]) => `<option value="${k}" ${a.bank === k ? 'selected' : ''}>${v.name}</option>`).join('')}</select></label>
-  </form>`, `${a.id ? `<button class="btn danger left" data-a="archiveAccount" data-id="${a.id}">Archive</button>` : ''}<button class="btn ghost" data-a="close">Cancel</button><button class="btn pri" data-a="saveAccount" data-id="${a.id || ''}">Save account</button>`);
+  </form>`, `${a.id ? `<button class="btn danger left" data-a="archiveAccount" data-id="${a.id}">Archive</button><button class="btn" data-a="matchAccount" data-id="${a.id}">Match balance</button>` : ''}<button class="btn ghost" data-a="close">Cancel</button><button class="btn pri" data-a="saveAccount" data-id="${a.id || ''}">Save account</button>`);
 }
 
 function billForm(b = {}) {
@@ -905,6 +915,57 @@ function catForm(c = {}) {
       <label class="f">Type<select name="kind" ${c.id ? 'disabled' : ''}><option value="expense" ${c.kind !== 'income' ? 'selected' : ''}>Spending</option><option value="income" ${c.kind === 'income' ? 'selected' : ''}>Income</option></select></label></div>
     <label class="f">Name<input name="name" value="${esc(c.name || '')}" autofocus></label></form>`,
   `${c.id ? `<button class="btn danger left" data-a="archiveCat" data-id="${c.id}">Archive</button>` : ''}<button class="btn ghost" data-a="close">Cancel</button><button class="btn pri" data-a="saveCat" data-id="${c.id || ''}">Save</button>`);
+}
+
+// ---------- match balance: line Scry up with the real bank balance ----------
+function matchForm(a, real) {
+  const cur = a.currency, have = balances()[a.id];
+  modal(`Match ${a.name}`, `<form class="form" id="matchf" data-id="${a.id}" onsubmit="return false">
+    <div class="match-have"><div class="lbl">Scry thinks you have</div><div class="mid">${money(have, cur)}</div><div class="xs faint">${matchedLabel(a.id)}</div></div>
+    <div class="f"><span>What your ${esc(a.name)} app shows right now</span>
+      <div class="match-in">${amountField('real', real ?? null, cur)}<button type="button" class="btn cam" data-a="matchShot" data-id="${a.id}" aria-label="Read it from a screenshot of your bank app" title="Read it from a screenshot">${IC('camera')}</button></div></div>
+    <div class="callout xs" id="matchDiff"></div>
+  </form>`, `<button class="btn ghost" data-a="close">Cancel</button><button class="btn pri" data-a="saveMatch" data-id="${a.id}">Match</button>`);
+  syncMatch();
+}
+function syncMatch() {
+  const f = $('#matchf'); if (!f) return;
+  const a = acc(f.dataset.id), have = balances()[a.id], raw = f.real.value.trim(), real = amt(raw), d = real - have;
+  $('#matchDiff').innerHTML = !raw ? `Type the balance, or tap the camera and pick a screenshot of your ${esc(a.name)} app.`
+    : Math.abs(d) < 0.005 ? `${IC('circle-check', 'sm')} Spot on. Nothing to fix.`
+    : `Scry is <b>${money(Math.abs(d), a.currency)} ${d > 0 ? 'too low' : 'too high'}</b>. I'll add one "${ADJ}" of ${d > 0 ? '+' : '−'}${money(Math.abs(d), a.currency)} so it matches. It won't count as spending or income.${Math.abs(d) > 500 ? '<div class="warn" style="margin-top:6px">That is a big gap: a transaction may have been missed. Check Activity after.</div>' : ''}`;
+  drawIcons();
+}
+async function saveMatch(id) {
+  const f = $('#matchf'), a = acc(id), raw = f.real.value.trim();
+  if (!raw) { f.real.focus(); return toast('Enter the balance your bank app shows'); }
+  const d = Math.round((amt(raw) - balances()[id]) * 100) / 100;
+  await safe(async () => {
+    if (Math.abs(d) >= 0.01) await DB.insert('transactions', { kind: d > 0 ? 'income' : 'expense', amount: Math.abs(d), date: today(), account_id: id, note: ADJ, tag: 'personal', category_id: null });
+    const matched = { ...matchedMap(), [id]: today() };
+    if (isDemo()) { S.settings.matched = matched; saveSettings(); }
+    else { const { data, error } = await S.sb.auth.updateUser({ data: { matched } }); if (error) throw error; S.user = data.user; }
+  });
+  closeModal(); render();
+  toast(Math.abs(d) < 0.01 ? `${a.name} was spot on` : `${a.name} matched. It was off by ${money(Math.abs(d), a.currency)}`);
+}
+function matchShot(id) {
+  if (isDemo()) return toast("Reading screenshots works once you're signed in");
+  const a = acc(id), inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'image/*';
+  inp.onchange = async () => {
+    const file = inp.files[0]; if (!file) return;
+    $('#matchDiff').innerHTML = '<span class="spin sm" aria-hidden="true"></span> Reading your screenshot…';
+    try {
+      const image = await shrinkPhoto(file);
+      const { data, error } = await S.sb.functions.invoke('scan', { body: { image, media_type: 'image/jpeg', categories: [], today: today(), hint: `Balance screen for the account "${a.name}" (${BANKS[a.bank]?.name || a.type}) in ${a.currency}.` } });
+      if (error || !data || data.doc_type !== 'balance') throw new Error('no balance');
+      const f = $('#matchf'); if (!f) return;
+      f.real.value = Number(data.total).toFixed(2); syncMatch();
+      if (data.currency && data.currency !== a.currency) $('#matchDiff').insertAdjacentHTML('beforeend', `<div class="warn" style="margin-top:6px">The screenshot shows ${esc(data.currency)}, this account is ${esc(a.currency)}. Double-check.</div>`);
+    } catch { if ($('#matchDiff')) $('#matchDiff').innerHTML = '<span class="warn">Couldn\'t find a balance in that screenshot. Type it in instead.</span>'; }
+  };
+  inp.click();
 }
 
 // ---------- photo scanner: receipts, bills, card slips, card statements ----------
@@ -960,6 +1021,7 @@ function scanSummary(r) {
 }
 function showScan(r) {
   if (r.doc_type === 'card') return modal("That's a card", `<div class="callout">Scry never reads card numbers. Scan the <b>receipt</b>, <b>charge slip</b> or <b>statement</b> instead.</div>`, `<button class="btn ghost" data-a="close">Close</button><button class="btn pri" data-a="scanAgain">Scan something else</button>`);
+  if (r.doc_type === 'balance') return modal('That is a balance screen', `<div class="callout">To line Scry up with it, open <b>Accounts</b>, tap <b>Match</b> on that account, then tap the camera and pick this screenshot.</div>`, `<a class="btn pri" href="#accounts" data-a="close">Go to Accounts</a>`);
   if (r.doc_type === 'other' && !r.total) return modal('Nothing to add', `<div class="callout">I couldn't find an amount in that photo. Try again closer, with the total in view.</div>`, `<button class="btn ghost" data-a="close">Close</button><button class="btn pri" data-a="scanAgain">Try again</button>`);
   const foreign = r.currency && r.currency !== 'PHP' ? ` (${r.currency} on the photo)` : '';
   if (r.doc_type === 'bill') {
@@ -1123,6 +1185,9 @@ const A = {
   },
   async archiveAccount(el) { if (!confirm('Archive this account? Its history stays.')) return; await safe(() => DB.update('accounts', el.dataset.id, { archived: true })); closeModal(); render(); },
   addBill: () => billForm(),
+  matchAccount: el => { closeModal(); matchForm(acc(el.dataset.id)); },
+  matchShot: el => matchShot(el.dataset.id),
+  saveMatch: el => saveMatch(el.dataset.id),
   scan: () => scanPick(),
   scanAgain: () => { closeModal(); scanPick(); },
   scanAddLines: () => scanAddLines(),
@@ -1285,6 +1350,7 @@ document.addEventListener('input', ev => {
   const el = ev.target;
   if (el.dataset.c === 'fq') { clearTimeout(qTimer); qTimer = setTimeout(() => { S.f.q = el.value; const pos = el.selectionStart; render(); const n = $('[data-c="fq"]'); n.focus(); n.setSelectionRange(pos, pos); }, 250); }
   const f = $('#txf');
+  if (el.name === 'real' && $('#matchf')) syncMatch();
   if (f && el.name === 'note' && f.dataset.kind !== 'transfer') {
     const g = guessCategory(el.value, f.dataset.kind);
     if (g && (!f.category_id.value || f.dataset.guessed === f.category_id.value)) { f.category_id.value = g; f.dataset.guessed = g; $('#guessHint').textContent = `Guessed from the note: ${cat(g)?.name}. Tap another to change.`; syncTxForm(); }
