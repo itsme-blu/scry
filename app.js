@@ -578,9 +578,9 @@ function vHome() {
     </section>
     <div class="quick">
       <button data-a="addTx"><span class="b gold">${IC('plus', 'lg')}</span>Add</button>
+      <button data-a="scan"><span class="b">${IC('scan-line')}</span>Scan</button>
       <button data-a="addTransfer"><span class="b">${IC('arrow-left-right')}</span>Transfer</button>
       <a href="#bills"><span class="b">${IC('receipt')}</span>Pay bill</a>
-      <a href="#penny"><span class="b" style="color:var(--gold-1)">${IC('sparkles')}</span>Penny</a>
     </div>
     ${tray(4)}
     <div class="sechead"><b>Accounts</b><a href="#accounts">See all</a></div>
@@ -634,7 +634,7 @@ function vTx() {
   for (const t of list) (days[t.date] ||= []).push(t);
   const filtered = S.f.account || S.f.category || S.f.q;
   return ph('Activity', 'Transactions', `${money(mt.inc)} in · ${money(mt.out)} out in ${monthName(S.month)}`,
-    `${monthNav()}<button class="btn" data-a="import">⇪ Import statement</button><button class="btn ghost" data-a="exportCsv">Export</button>`)
+    `${monthNav()}<button class="btn" data-a="scan">${IC('scan-line', 'sm')} Scan</button><button class="btn" data-a="import">${IC('upload', 'sm')} Import statement</button><button class="btn ghost" data-a="exportCsv">Export</button>`)
   + tray(50)
   + `<div class="toolbar"><label class="search"><span class="sr">Search</span><input placeholder="Search notes, categories, accounts" value="${esc(S.f.q)}" data-c="fq"></label>
     <select data-c="faccount" aria-label="Account"><option value="">All accounts</option>${activeAccounts().map(a => `<option value="${a.id}" ${S.f.account === a.id ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select>
@@ -675,7 +675,7 @@ function vBills() {
   const group = (title, arr) => arr.length ? `<div class="day"><span>${title}</span><span class="mono">${money(sum(arr))}</span></div><div class="list">${arr.sort((x, y) => x.date.localeCompare(y.date)).map(o => billRow(o)).join('')}</div>` : '';
   const paused = S.d.bills.filter(b => !b.active && (S.tag === 'all' || b.tag === S.tag));
   const head = ph('Bills', 'Bills & subscriptions', null,
-    `${tagChips()}<div class="chips" role="group" aria-label="View"><button class="${S.billView === 'list' ? 'on' : ''}" data-a="billView" data-v="list">List</button><button class="${S.billView === 'cal' ? 'on' : ''}" data-a="billView" data-v="cal">Calendar</button></div><button class="btn pri" data-a="addBill">+ Add bill</button>`)
+    `${tagChips()}<div class="chips" role="group" aria-label="View"><button class="${S.billView === 'list' ? 'on' : ''}" data-a="billView" data-v="list">List</button><button class="${S.billView === 'cal' ? 'on' : ''}" data-a="billView" data-v="cal">Calendar</button></div><button class="btn" data-a="scan">${IC('scan-line', 'sm')} Scan a bill</button><button class="btn pri" data-a="addBill">+ Add bill</button>`)
   + `<section class="card mb"><div class="trio">
       <div><div class="lbl">Overdue</div><div class="mid ${late.length ? 'neg' : ''}">${money(sum(late))}</div><div class="xs faint">${late.length} bill${late.length === 1 ? '' : 's'}</div></div>
       <div><div class="lbl">Next 7 days</div><div class="mid warn">${money(sum(soon))}</div><div class="xs faint">${soon.length} bill${soon.length === 1 ? '' : 's'}</div></div>
@@ -863,6 +863,99 @@ function catForm(c = {}) {
   `${c.id ? `<button class="btn danger left" data-a="archiveCat" data-id="${c.id}">Archive</button>` : ''}<button class="btn ghost" data-a="close">Cancel</button><button class="btn pri" data-a="saveCat" data-id="${c.id || ''}">Save</button>`);
 }
 
+// ---------- photo scanner: receipts, bills, card slips, card statements ----------
+// The photo goes to the `scan` Edge Function once (Claude reads it) and is never stored.
+// Nothing is saved until Blu taps Save on the pre-filled form.
+let scanResult = null;
+function scanPick() {
+  if (isDemo()) return toast("Scanning works once you're signed in");
+  if (!activeAccounts().length) return (toast('Add an account first'), accountForm());
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'image/*'; inp.setAttribute('capture', 'environment');
+  inp.onchange = () => inp.files[0] && scanFile(inp.files[0]);
+  inp.click();
+}
+async function shrinkPhoto(file, max = 1600) {
+  const bmp = await createImageBitmap(file);
+  const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
+  const c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', 0.85).split(',')[1];
+}
+async function scanFile(file) {
+  modal('Reading your photo', `<div class="scan-wait"><span class="spin" aria-hidden="true"></span><div><b>Scry is reading it…</b><div class="xs muted">Usually 5 to 15 seconds. The photo isn't saved.</div></div></div>`, `<button class="btn ghost" data-a="close">Cancel</button>`);
+  let image;
+  try { image = await shrinkPhoto(file); } catch { closeModal(); return toast("Couldn't open that photo"); }
+  const cats = S.d.categories.filter(c => !c.archived && c.kind === 'expense').map(c => c.name);
+  let r;
+  try {
+    const { data, error } = await S.sb.functions.invoke('scan', { body: { image, media_type: 'image/jpeg', categories: cats, today: today() } });
+    if (error) { let m; try { m = (await error.context?.json?.())?.error; } catch { /* no body */ } throw new Error(m || "Couldn't read that photo. Try again."); }
+    r = data;
+  } catch (e) {
+    if (!$('.scan-wait')) return;  // cancelled
+    return modal("Couldn't read it", `<div class="callout">${esc(e.message)}</div>`, `<button class="btn ghost" data-a="close">Close</button><button class="btn pri" data-a="scanAgain">Try again</button>`);
+  }
+  if (!$('.scan-wait')) return;    // cancelled while waiting
+  closeModal(); scanResult = r; showScan(r);
+}
+const catByName = name => S.d.categories.find(c => !c.archived && c.kind === 'expense' && c.name === name)?.id;
+function scanAccount(r) {
+  const accs = activeAccounts();
+  if (r.payment_method === 'cash') return accs.find(a => a.type === 'cash')?.id;
+  if (r.payment_method === 'card' || r.card_last4) return accs.find(a => a.type === 'credit')?.id;
+  if (r.payment_method === 'ewallet') return accs.find(a => a.bank === 'gcash')?.id;
+  return undefined;
+}
+function scanSummary(r) {
+  const bits = [{ receipt: 'Receipt', card_slip: 'Card slip', bill: 'Bill', card_statement: 'Card statement', other: 'Photo' }[r.doc_type] || 'Photo'];
+  if (r.card_last4) bits.push('card ending ' + r.card_last4);
+  if (r.note) bits.push(r.note);
+  if (r.confidence !== 'high') bits.push(r.confidence === 'low' ? 'blurry, please double-check the amount' : 'partly unclear, check the amount');
+  return bits.join(' · ');
+}
+function showScan(r) {
+  if (r.doc_type === 'card') return modal("That's a card", `<div class="callout">Scry never reads card numbers. Scan the <b>receipt</b>, <b>charge slip</b> or <b>statement</b> instead.</div>`, `<button class="btn ghost" data-a="close">Close</button><button class="btn pri" data-a="scanAgain">Scan something else</button>`);
+  if (r.doc_type === 'other' && !r.total) return modal('Nothing to add', `<div class="callout">I couldn't find an amount in that photo. Try again closer, with the total in view.</div>`, `<button class="btn ghost" data-a="close">Close</button><button class="btn pri" data-a="scanAgain">Try again</button>`);
+  const foreign = r.currency && r.currency !== 'PHP' ? ` (${r.currency} on the photo)` : '';
+  if (r.doc_type === 'bill') {
+    const existing = S.d.bills.find(b => b.active && norm(b.name) === norm(r.merchant));
+    if (existing) billForm({ ...existing, amount: r.total || existing.amount, due_date: r.due_date || existing.due_date });
+    else billForm({ name: r.merchant, amount: r.total || null, due_date: r.due_date || today(), repeat: 'monthly', category_id: catByName(r.category), note: r.note || null });
+    return scanCallout(`${existing ? 'Updating your existing bill. ' : ''}${scanSummary(r)}${foreign}`);
+  }
+  if (r.doc_type === 'card_statement' && r.lines?.length) return scanStatement(r);
+  txForm({ kind: 'expense', amount: r.total || null, note: r.merchant || null, date: r.date || today(), category_id: catByName(r.category), account_id: scanAccount(r) });
+  scanCallout(scanSummary(r) + foreign);
+}
+function scanCallout(text) {
+  const f = $('#txf') || $('#billf'); if (!f) return;
+  f.insertAdjacentHTML('afterbegin', `<div class="callout xs scan-note">${IC('scan-line', 'sm')} Read from your photo: ${esc(text)}. Check it, then save.</div>`);
+  drawIcons();
+}
+function scanStatement(r) {
+  const credit = activeAccounts().find(a => a.type === 'credit');
+  const already = l => S.d.transactions.some(t => t.date === l.date && Math.abs(num(t.amount) - Math.abs(l.amount)) < 0.005);
+  modal(esc(r.merchant || 'Card statement'), `<div class="callout xs scan-note">${IC('scan-line', 'sm')} ${esc(scanSummary(r))}${r.total ? ` · amount due <b>${money(r.total)}</b>` : ''}${r.due_date ? ` by <b>${shortDate(r.due_date)}</b>` : ''}</div>
+    <form class="form" id="scanf" onsubmit="return false">
+      <label class="f">Add these charges to<select name="account_id">${accOptions(credit?.id)}</select></label>
+      <label class="row small muted" style="gap:8px"><input type="checkbox" checked data-a="scanAll"> Select all</label>
+      <div class="list" id="scanLines">${r.lines.map((l, i) => { const dup = already(l); return `<label class="item" style="gap:10px"><input type="checkbox" data-i="${i}" ${l.amount > 0 && !dup ? 'checked' : ''}><div class="main"><div class="t">${esc(l.description || 'Charge')}</div><div class="s">${l.date ? shortDate(l.date) : 'no date'}${l.amount < 0 ? ' · payment or credit' : ''}${dup ? ' · looks already added' : ''}</div></div><div class="amt ${l.amount < 0 ? 'pos' : ''}">${money(Math.abs(l.amount))}</div></label>`; }).join('')}</div>
+      ${r.total && r.due_date ? `<label class="row small muted" style="gap:8px"><input type="checkbox" name="mkbill" checked> Also add a bill reminder for ${money(r.total)} due ${shortDate(r.due_date)}</label>` : ''}
+    </form>`, `<button class="btn ghost" data-a="close">Cancel</button><button class="btn pri" data-a="scanAddLines">Add selected</button>`, true);
+}
+async function scanAddLines() {
+  const r = scanResult, v = form('#scanf'); if (!r) return;
+  const picks = [...document.querySelectorAll('#scanLines input[data-i]:checked')].map(c => r.lines[Number(c.dataset.i)]);
+  if (!picks.length && !v.mkbill) return toast('Pick at least one');
+  const rows = picks.map(l => { const kind = l.amount < 0 ? 'income' : 'expense'; return { kind, amount: Math.abs(l.amount), date: l.date || today(), account_id: v.account_id, note: l.description || null, tag: 'personal', category_id: guessCategory(l.description, kind) }; });
+  await safe(async () => {
+    if (rows.length) await DB.insert('transactions', rows);
+    if (v.mkbill) await DB.insert('bills', { name: r.merchant || 'Card bill', amount: r.total, due_date: r.due_date, repeat: 'monthly', account_id: null, autopay: false, tag: 'personal', active: true, note: r.minimum_due ? `Minimum due ${money(r.minimum_due)}` : null });
+  });
+  scanResult = null; closeModal(); render(); toast(`Added ${rows.length} charge${rows.length === 1 ? '' : 's'}${v.mkbill ? ' and a bill reminder' : ''}`);
+}
+
 // ---------- statement import (CSV) ----------
 function parseCSV(text) {
   const rows = []; let row = [], f = '', q = false;
@@ -984,6 +1077,10 @@ const A = {
   },
   async archiveAccount(el) { if (!confirm('Archive this account? Its history stays.')) return; await safe(() => DB.update('accounts', el.dataset.id, { archived: true })); closeModal(); render(); },
   addBill: () => billForm(),
+  scan: () => scanPick(),
+  scanAgain: () => { closeModal(); scanPick(); },
+  scanAddLines: () => scanAddLines(),
+  scanAll: el => { const on = el.checked; document.querySelectorAll('#scanLines input[data-i]').forEach(c => { c.checked = on; }); },
   editBill: el => billForm(S.d.bills.find(b => b.id === el.dataset.id)),
   async saveBill(el) {
     const v = form('#billf'); if (!v.name.trim()) return toast('Give the bill a name');

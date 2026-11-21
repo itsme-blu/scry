@@ -419,6 +419,11 @@ select option{background:#121a36}
   .fab{bottom:calc(96px + env(safe-area-inset-bottom));right:18px;border-radius:20px}
   .card{border-radius:22px}
 }
+.scan-wait{display:flex;gap:14px;align-items:center;padding:8px 2px}
+.spin{width:26px;height:26px;border-radius:50%;border:3px solid rgba(255,255,255,.15);border-top-color:var(--gold-1);animation:spin .8s linear infinite;flex:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+.scan-note{display:flex;gap:8px;align-items:flex-start}
+#scanLines .item{cursor:pointer}
 </style>
 </head>
 <body>
@@ -427,6 +432,6 @@ select option{background:#121a36}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
 <script src="config.js?v=3" onerror="void 0"></script>
-<script src="app.js?v=9"></script>
+<script src="app.js?v=10"></script>
 </body>
 </html>
