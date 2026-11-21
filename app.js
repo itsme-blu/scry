@@ -403,7 +403,7 @@ function parseNotif(item) {
   } else if ((m = text.match(/(?:US)?\$\s?([0-9][0-9,]*(?:\.[0-9]{1,2})?)/))) { currency = 'USD'; amount = m[1]; }
   amount = amount != null ? Number(String(amount).replace(/,/g, '')) : null;
   const inRe = /you(?:'ve| have)? received|\breceived\b|credited|cash[- ]?in|deposit|incoming|refund|added to your|you got|has arrived|interest earned|money in/i;
-  const outRe = /you(?:'ve| have)? sent|\bsent to\b|you paid|payment (?:to|of|for)|\bpaid\b|purchase|debited|withdr[ae]w|cash[- ]?out|transferred to|\bspent\b|charged|deducted|money out|card (?:payment|transaction)/i;
+  const outRe = /you(?:'ve| have)? sent|\bsent to\b|you paid|payment (?:to|of|for)|\bpaid\b|purchase|debited|withdr[ae]w|cash[- ]?out|transferred to|\bspent\b|charged|deducted|money out|card (?:payment|transaction)|transaction of\b.{1,40}?\bto\b|qrph payment|scan ?& ?pay transaction|bills? payment|merchant payment/i;
   let kind = null;
   if (/sent you|has sent you/i.test(text)) kind = 'income';
   else if (/\btransfer of\b.{1,40}?\bto\b/i.test(text)) kind = 'expense';   // MariBank: "An InstaPay transfer of PHP 50.00 to GCash …"
@@ -425,7 +425,13 @@ function parseNotif(item) {
     const k = paid ? 'billpaid' : due ? 'billdue' : null;
     return { amount, currency, kind: k, party: billerOf(item), due: k === 'billdue' ? billDueOf(item) : null, ref: rm ? rm[1] : null, ok: k != null };   // amount may be missing (subject-only email)
   }
-  return { amount, currency, kind, party: pm ? pm[1].trim() : null, ref: rm ? rm[1] : null, ok: amount != null && kind != null };
+  // Cashback / rebate credited (MariBank: "Your PHP 2.00 reward for Scan & Pay Cashback has been credited")
+  const cashback = /cash ?back|rebate|reward/i.test(text) && /credited|received|earned|added|unlocked/i.test(text);
+  if (cashback) kind = 'income';
+  // A fee written in the message: "fee of PHP 15.00", "convenience fee: P10"
+  const fm = text.match(/(?:transaction|service|convenience|processing|transfer)?\s*(?:fee|charge)s?\b[^0-9]{0,25}?(?:PHP|₱|\bP)?\s?([0-9]+(?:\.[0-9]{1,2})?)/i);
+  const fee = fm && !cashback ? Number(fm[1]) : 0;
+  return { amount, currency, kind, party: cashback ? 'Cashback' : (pm ? pm[1].trim() : null), cashback, fee: fee > 0 && amount && fee < amount ? fee : 0, ref: rm ? rm[1] : null, ok: amount != null && kind != null };
 }
 function possibleDuplicate(accountId, amount, date) {
   return S.d.transactions.find(t => t.account_id === accountId && Math.abs(num(t.amount) - amount) < 0.005 && Math.abs(daysBetween(t.date, date)) <= 2);
@@ -472,7 +478,23 @@ function inboxCheck(it) {
     return { p, a, date, dup: counted, curMismatch, xfer: { from: null, to: a }, counted: !!counted, ready: false };
   }
   const dup = a && p.amount != null ? possibleDuplicate(a.id, p.amount, date) : null;
-  return { p, a, date, dup, curMismatch, ready: p.ok && a && !dup && !curMismatch };
+  // Paying a bill from a bank or e-wallet usually adds ₱10–15: ₱515 against a ₱500 bill = ₱500 bill + ₱15 fee.
+  let split = null;
+  if (p.ok && p.kind === 'expense' && !p.cashback) {
+    const near = S.d.bills.filter(b => b.active && Math.abs(daysBetween(b.due_date, date)) <= 12);
+    const named = near.find(b => p.party && (norm(p.party).includes(norm(b.name)) || norm(b.name).includes(norm(p.party))));
+    const bill = (named && p.amount - num(named.amount) >= 0 && p.amount - num(named.amount) <= 30 ? named : null)
+      || near.find(b => p.amount - num(b.amount) > 0.004 && p.amount - num(b.amount) <= 30);
+    if (bill) split = { bill, base: num(bill.amount), fee: Math.round((p.amount - num(bill.amount)) * 100) / 100 };
+    else if (p.fee) split = { bill: null, base: Math.round((p.amount - p.fee) * 100) / 100, fee: p.fee };
+  }
+  return { p, a, date, dup, curMismatch, split, ready: p.ok && a && !dup && !curMismatch };
+}
+// Cashback and fees get their own categories (made once, on first use).
+async function catFor(kind, name, icon) {
+  const ex = S.d.categories.find(c => !c.archived && c.kind === kind && norm(c.name) === norm(name));
+  if (ex) return ex.id;
+  const [c] = await DB.insert('categories', { kind, name, icon, sort: 90 }); return c.id;
 }
 
 // ---------- seeding ----------
@@ -774,6 +796,8 @@ function reviewRow(it) {
     if (!a) { status = `No ${bank?.name || ''} account linked`; st = 'risk'; }
     else if (curMismatch) { status = `${p.currency} account needed`; st = 'risk'; }
     else if (dup) { status = 'Possible duplicate'; st = 'risk'; }
+    else if (p.cashback) status = 'Cashback';
+    else if (inboxCheck(it).split) { const sp = inboxCheck(it).split; status = `${sp.bill ? sp.bill.name : 'Payment'} ${money(sp.base)} + ${money(sp.fee)} fee`; }
     else status = [g?.name, a.name].filter(Boolean).join(' · ');
   }
   const logo = BANK_LOGO[bk] ? `<img src="${BANK_LOGO[bk]}" alt="" width="40" height="40">` : `<span>${esc((bank?.name || it.app || '?')[0])}</span>`;
@@ -1072,6 +1096,9 @@ function vHome() {
     <section class="card summ2 c5" style="--o:5">
       <div class="sh"><b class="cap">Summary</b><span class="grow"></span><span class="pill">${monthName(thisMonth()).split(' ')[0]}</span></div>
       <div class="s2-net"><div class="cap">Net cash flow</div><div class="v ${mt.left < 0 ? 'neg' : ''}">${mt.left > 0 ? '+' : ''}${money(mt.left)}</div></div>
+      ${(() => { const cbc = catsOf('income').find(c => norm(c.name) === 'cashback'); const v = cbc ? txInMonth(thisMonth()).filter(t => t.category_id === cbc.id).reduce((x, t) => x + toPHP(num(t.amount), t.account_id), 0) : 0;
+        const fc = catsOf('expense').find(c => norm(c.name) === 'fees'); const f = fc ? txInMonth(thisMonth()).filter(t => t.category_id === fc.id).reduce((x, t) => x + toPHP(num(t.amount), t.account_id), 0) : 0;
+        return v || f ? `<div class="s2-extra">${v ? `<span>🎁 Cashback <b>${money(v)}</b></span>` : ''}${f ? `<span>🧾 Fees <b>${money(f)}</b></span>` : ''}</div>` : ''; })()}
       <div class="s2-bar" aria-hidden="true"><i class="in" style="flex:${tot ? mt.inc : 1}"></i><i class="out" style="flex:${tot ? mt.out : 1}"></i></div>
       <div class="s2-row">
         <a class="s2 in" href="#tx"><span class="ic">${IC('arrow-down-left', 'sm')}</span><span class="k">Income</span><b>${money(mt.inc)}</b><small>${plural(nIn, 'transaction')}${tot ? ` · ${pIn}%` : ''}</small></a>
@@ -1804,8 +1831,20 @@ const A = {
   },
 };
 async function acceptOne(it) {
-  const { p, a, date, xfer, ready } = inboxCheck(it); if (!p.ok || !a || !ready) return;
+  const { p, a, date, xfer, ready, split } = inboxCheck(it); if (!p.ok || !a || !ready) return;
   const note = p.party || it.title || BANKS[bankOf(it)]?.name;
+  if (!xfer && (p.cashback || split)) return safe(async () => {
+    let first;
+    if (p.cashback) {
+      [first] = await DB.insert('transactions', { kind: 'income', amount: p.amount, date, account_id: a.id, note: `${BANKS[bankOf(it)]?.name || ''} cashback`.trim(), category_id: await catFor('income', 'Cashback', '🎁'), tag: 'personal', inbox_id: it.id });
+    } else {
+      const b = split.bill;
+      [first] = await DB.insert('transactions', { kind: 'expense', amount: split.base, date, account_id: a.id, note: b ? b.name : note, category_id: b?.category_id || guessCategory(note, 'expense'), tag: b?.tag || 'personal', inbox_id: it.id, bill_id: b?.id || null });
+      await DB.insert('transactions', { kind: 'expense', amount: split.fee, date, account_id: a.id, note: `${b ? b.name : note} fee`, category_id: await catFor('expense', 'Fees', '🧾'), tag: b?.tag || 'personal' });
+      if (b) await DB.update('bills', b.id, b.repeat === 'none' ? { active: false } : { due_date: nextDate(b.due_date, b.repeat) || b.due_date });
+    }
+    await DB.update('inbox', it.id, { status: 'done', transaction_id: first.id });
+  });
   await safe(async () => {
     const row = xfer
       ? { kind: 'transfer', amount: p.amount, date, account_id: xfer.from.id, to_account_id: xfer.to.id, note: `Transfer to ${xfer.to.name}`, tag: 'personal', inbox_id: it.id }
